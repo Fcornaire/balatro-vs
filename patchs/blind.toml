@@ -1,0 +1,20 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+#set_blind: there is no blind on netplay,ignore debuffs
+[[patches]]
+[patches.pattern]
+target = "blind.lua"
+pattern = "--add new debuffs"
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    return
+end
+
+'''
+match_indent = true
+times = 1
+
+

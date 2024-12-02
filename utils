@@ -1,0 +1,17 @@
+--create a specific card
+local card = Card(G.opponent_consumeables.T.x,
+    G.opponent_consumeables.T.y, G.CARD_W, G.CARD_H, G.P_CARDS.empty, G.P_CENTERS['c_cryptid'],
+    { bypass_discovery_center = true, bypass_discovery_ui = true })
+card:start_materialize()
+G.opponent_consumeables:emplace(card)
+
+
+create_drag_target_from_card
+
+'custom seed with booster card at first shop = 98557683'
+    "Check why Skip and then choosing from pack as follow up crash"
+
+    "ease_background_colour_blind pour la color"
+
+    "fix bad timer on new round (the timer used is end shop, no the right one)"
+    "Seed to check truly (different joker): ZIRgGZG1"

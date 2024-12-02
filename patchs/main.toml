@@ -1,0 +1,172 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+[[patches]]
+[patches.module]
+source = "./lovely/globals.lua"
+before = "main.lua"
+name = "balatro-vs_globals"
+
+[[patches]]
+[patches.module]
+source = "./lovely/core_network.lua"
+before = "main.lua"
+name = "balatro-vs_network"
+
+[[patches]]
+[patches.module]
+source = "./lovely/core_interaction.lua"
+before = "main.lua"
+name = "balatro-vs_interaction"
+
+[[patches]]
+[patches.module]
+source = "./lovely/core.lua"
+before = "main.lua"
+name = "balatro-vs_core"
+
+[[patches]]
+[patches.module]
+source = "./lovely/utils.lua"
+before = "main.lua"
+name = "balatro-vs_utils"
+
+
+[[patches]]
+[patches.module]
+source = "./lovely/lume.lua"
+before = "main.lua"
+name = "rxi-lume"
+
+[[patches]]
+[patches.module]
+source = "./lovely/lurker.lua"
+before = "main.lua"
+name = "rxi-lurker"
+
+[[patches]]
+[patches.pattern]
+target = "main.lua"
+pattern = "math.randomseed( G.SEED )"
+position = "before"
+payload = '''
+
+IS_DEV = false --TODO: confg file
+
+local lurker = nil 
+lume = require('rxi-lume')
+
+if IS_DEV then
+      lurker = require('rxi-lurker')
+end
+
+require('balatro-vs_core')
+VecDeque = require('balatro-vs_utils').VecDeque
+
+ORIG_RENDER_SCALE = {
+      TILE_W = G.TILE_W,
+      TILE_H = G.TILE_H,
+      TILESCALE = G.TILESCALE
+}
+
+ORIG_HAND_T_Y = -1
+
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "main.lua"
+pattern = "function love.update( dt )"
+position = "after"
+payload = '''
+if IS_DEV and lurker then --use in DEV mode only,lurker impacts performance a lot
+      lurker.update() 
+end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "main.lua"
+pattern = "G.ROOM_ORIG = {"
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+     print('prevent resize on netplay')
+
+    G.TILE_W    = ORIG_RENDER_SCALE.TILE_W * 1.3
+    G.TILE_H    = ORIG_RENDER_SCALE.TILE_H * 1.3
+    G.TILESCALE = G.TILESCALE * 0.65
+    --G.ROOM.T.y  = G.ROOM.T.y - 1
+    --G.ROOM.T.x  = G.ROOM.T.x - 1.0
+
+end
+
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "main.lua"
+pattern = "run_time = love.timer.getTime()"
+position = "before"
+payload = '''
+
+if BALATRO_VS_CTX then
+    if network_is_ws_routine_finished and network_is_ws_routine_finished() and not BALATRO_VS_CTX.network.is_error then
+        BALATRO_VS_CTX.network.is_error = true
+        on_network_issue()
+    end
+
+    if BALATRO_VS_CTX.network.should_reset then
+        if network_reset then
+            network_reset()
+        end
+
+        BALATRO_VS_CTX.network.should_reset = false
+    end
+    network_poll_and_update()
+    if BALATRO_VS_CTX.network.is_live then
+        if BALATRO_VS_CTX.network.has_opponent_maestro_and_highlighted_cards then
+            -- get highlighted hand
+            local highlighted_cards = G.hand:get_highlighted_cards_index()
+
+            if network_send_highlighted_card ~= nil then
+                network_send_highlighted_card(highlighted_cards)
+            end
+
+            BALATRO_VS_CTX.network.has_opponent_maestro_and_highlighted_cards = false
+        end
+    end
+    if BALATRO_VS_CTX.timer and not BALATRO_VS_CTX.timer:is_paused() then
+        BALATRO_VS_CTX.timer:update(run_time)
+        local pretty_time = BALATRO_VS_CTX.timer:update_and_get_pretty_time_left()
+        if pretty_time then
+            update_message_instant(pretty_time, 1.5)
+        end
+    end
+end
+
+'''
+match_indent = true
+times = 1
+
+#quit: update the game on exit if an update is available
+[[patches]]
+[patches.pattern]
+target = "main.lua"
+pattern = "if G.STEAM then G.STEAM:shutdown() end"
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_updating then
+    updater_update()
+end
+
+'''
+match_indent = true
+times = 1

@@ -1,0 +1,568 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+# Shuffle opponent deck
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.deck:shuffle('nr'..G.GAME.round_resets.ante)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.opponent_deck:shuffle('nr'..G.GAME.opponent_round_resets.ante)
+    G.opponent_deck:hard_set_T()
+end
+
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''if G.play and G.play.cards[1] then return end'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if G.opponent_play and G.opponent_play.cards[1] then 
+        return end
+end
+
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''table.sort(G.hand.highlighted, function(a,b) return a.T.x < b.T.x end)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    table.sort(G.opponent_hand.highlighted, function(a,b) return a.T.x < b.T.x end)
+end
+
+'''
+match_indent = true
+times = 2
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''check_for_unlock({type = 'run_card_replays'})'''
+position = "before"
+payload = '''
+    delay(0.5)
+
+    for i=1, #G.opponent_hand.highlighted do
+        if G.opponent_hand.highlighted[i]:is_face() then inc_career_stat('c_face_cards_played', 1) end
+        G.opponent_hand.highlighted[i].base.times_played = G.opponent_hand.highlighted[i].base.times_played + 1
+        G.opponent_hand.highlighted[i].ability.played_this_ante = true
+        G.GAME.opponent_round_scores.cards_played.amt = G.GAME.opponent_round_scores.cards_played.amt + 1
+        draw_card(G.opponent_hand, G.opponent_play, i*100/#G.opponent_hand.highlighted, 'up', nil, G.opponent_hand.highlighted[i])
+    end
+
+'''
+match_indent = true
+times = 1
+
+#evaluate_play: Evaluate opponent play
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.FUNCS.evaluate_play()'''
+position = "after"
+payload = '''
+G.E_MANAGER:add_event(Event({
+    trigger = 'immediate',
+    func = function()
+        if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+            if G.GAME.opponent_current_round.hands_left > 0 then
+                G.FUNCS.opponent_play_cards_from_highlighted()
+            end
+
+            G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                func = function()
+                    G.FUNCS.network_wait_for_next_action()
+                    return true
+                end
+            }))
+        end
+
+        return true
+    end
+}))
+
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.FUNCS.discard_cards_from_highlighted = function(e, hook)'''
+position = "before"
+payload = '''
+
+function get_all_highlighted_hand_cards_index()
+    local highlighted_hand_cards_index = {}
+    for i, card in ipairs(G.hand.highlighted) do
+        local index_in_hand = -1
+
+        for j, hand_card in ipairs(G.hand.cards) do
+            if hand_card == card then
+                index_in_hand = j
+                break
+            end
+        end
+
+        table.insert(highlighted_hand_cards_index, index_in_hand)
+    end
+
+    return highlighted_hand_cards_index
+end
+
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.FUNCS.discard_cards_from_highlighted = function(e, hook)'''
+position = "after"
+payload = '''
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    print('player discarded cards')
+    local discarded_index = get_all_highlighted_hand_cards_index()
+    G.FUNCS.network_player_discarded_cards(discarded_index)
+end
+
+'''
+match_indent = true
+times = 1
+
+# Lock hand after player discarded cards
+# This is to prevent player re aligning cards before his hand is fully updated
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.GAME.round_scores.cards_discarded.amt = G.GAME.round_scores.cards_discarded.amt + #cards'''
+position = "after"
+payload = '''
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.hand:lock()
+end
+
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''add_round_eval_row({name = 'bottom', dollars = dollars})'''
+position = "at"
+payload = '''
+    if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+        --Default dollars gain finishing a round is 4
+        dollars = dollars + 4
+        add_round_eval_row({dollars = 4, bonus = true, name='default_dollars', pitch = pitch})
+
+        --Additionnal dollars gain if the player has won the round
+        local has_won_round = G.GAME.opponent_chips < G.GAME.chips
+        if has_won_round then
+            dollars = dollars + 4
+            add_round_eval_row({dollars = 4, bonus = true, name='won_round_dollars', pitch = pitch})
+        end
+        
+        add_round_eval_row({name = 'bottom', dollars = dollars})
+    end
+'''
+match_indent = true
+times = 1
+
+# CardArea(hand) might be frozen because of the turn play animation
+# we unlock it at the very end, at least when the draw is over
+# to prevent desycnhronized events
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''draw_card(G.deck,G.hand, i*100/hand_space,'up', true)
+        end
+    end'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+         G.E_MANAGER:add_event(Event({
+         trigger = 'after',
+         func = function()
+             if G.hand.locked then
+                 print('Freeing player hand!')
+                 G.hand:unlock()
+
+                --Hand changed, we need to update the alignement
+                 local new_alignement = lume.map(G.hand.cards, function(card) return card.unique_val end)
+
+                 BALATRO_VS_CTX.current_hand_alignement = copy_table(new_alignement)
+             end
+
+             return true
+         end
+     }))
+ end
+
+'''
+match_indent = true
+times = 1
+
+# Calculate opponent joker
+# also , discard opponent hand cards when round is over
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.FUNCS.draw_from_hand_to_discard()'''
+position = "after"
+payload = '''
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    for i = 1, #G.opponent_hand.cards do
+        --Check for hand doubling
+        local reps = { 1 }
+        local j = 1
+        while j <= #reps do
+            local percent = (i - 0.999) / (#G.opponent_hand.cards - 0.998) + (j - 1) * 0.1
+            if reps[j] ~= 1 then
+                opponent_card_eval_status_text((reps[j].jokers or reps[j].seals).card, 'jokers', nil, nil, nil,
+                    (reps[j].jokers or reps[j].seals))
+            end
+
+            --calculate the hand effects
+            local effects = { G.opponent_hand.cards[i]:get_end_of_round_effect() }
+            for k = 1, #G.opponent_jokers.cards do
+                --calculate the joker individual card effects
+                local eval = G.opponent_jokers.cards[k]:opponent_calculate_joker({
+                    cardarea = G.opponent_hand,
+                    other_card = G.opponent_hand.cards[i],
+                    individual = true,
+                    end_of_round = true
+                })
+                if eval then
+                    table.insert(effects, eval)
+                end
+            end
+
+            if reps[j] == 1 then
+                --Check for hand doubling
+                --From Red seal
+                local eval = eval_card(G.opponent_hand.cards[i],
+                    { end_of_round = true, cardarea = G.opponent_hand, repetition = true, repetition_only = true })
+                if next(eval) and (next(effects[1]) or #effects > 1) then
+                    for h = 1, eval.seals.repetitions do
+                        reps[#reps + 1] = eval
+                    end
+                end
+
+                --from Jokers
+                for j = 1, #G.opponent_jokers.cards do
+                    --calculate the joker effects
+                    local eval = opponent_eval_card(G.opponent_jokers.cards[j],
+                        {
+                            cardarea = G.opponent_hand,
+                            other_card = G.opponent_hand.cards[i],
+                            repetition = true,
+                            end_of_round = true,
+                            card_effects =
+                                effects
+                        })
+                    if next(eval) then
+                        for h = 1, eval.jokers.repetitions do
+                            reps[#reps + 1] = eval
+                        end
+                    end
+                end
+            end
+
+            for ii = 1, #effects do
+                --if this effect came from a joker
+                if effects[ii].card then
+                    G.E_MANAGER:add_event(Event({
+                        trigger = 'immediate',
+                        func = (function()
+                            effects[ii].card:juice_up(0.7); return true
+                        end)
+                    }))
+                end
+
+                --If dollars
+                if effects[ii].h_dollars then
+                    opponent_ease_dollars(effects[ii].h_dollars)
+                    opponent_card_eval_status_text(G.opponent_hand.cards[i], 'dollars', effects[ii].h_dollars, percent)
+                end
+
+                --Any extras
+                if effects[ii].extra then
+                    opponent_card_eval_status_text(G.opponent_hand.cards[i], 'extra', nil, percent, nil, effects[ii].extra)
+                end
+            end
+            j = j + 1
+        end
+    end
+
+    delay(0.2)
+    G.FUNCS.draw_from_opponnent_hand_to_opponent_discard()
+end
+
+'''
+match_indent = true
+times = 1
+
+# When a new round will start, we have to place discarded cards back to the deck
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.FUNCS.draw_from_discard_to_deck()'''
+position = "after"
+payload = '''
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.FUNCS.draw_from_opponent_discard_to_opponent_deck()
+end
+
+'''
+match_indent = true
+times = 1
+
+# End game when a player has reached the main goal
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.FUNCS.evaluate_round = function()'''
+position = "after"
+payload = '''
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    --Update round score
+    if G.GAME.opponent_chips > G.GAME.chips then
+        G.GAME.opponent_round_won = G.GAME.opponent_round_won + 1
+        if BALATRO_VS_CTX and BALATRO_VS_CTX.main_goal and G.GAME.opponent_round_won >= BALATRO_VS_CTX.main_goal then
+            G.STATE = G.STATES.GAME_OVER
+            G.STATE_COMPLETE = false
+        end
+    elseif G.GAME.opponent_chips < G.GAME.chips then
+        G.GAME.round_won = G.GAME.round_won + 1
+        if BALATRO_VS_CTX and BALATRO_VS_CTX.main_goal and G.GAME.round_won >= BALATRO_VS_CTX.main_goal then
+            G.E_MANAGER:add_event(Event({
+                trigger = 'immediate',
+                blocking = false,
+                blockable = false,
+                func = 
+                    (function()
+                        win_game()
+                        G.GAME.won = true
+                        return true
+                    end)
+            }))
+        end
+    end
+end
+
+'''
+match_indent = true
+times = 1
+
+# Hard unlock hand after end
+#Also trigger end of round interaction
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''function end_round()'''
+position = "after"
+payload = '''
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    BALATRO_VS_CTX.interaction_context:handle_interaction({end_of_round_non_joker = true}, {})
+    G.hand:hard_unlock()
+end
+
+'''
+match_indent = true
+times = 1
+
+# Add a timer on round eval to not wait indefinitely
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.STATE = G.STATES.ROUND_EVAL'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    on_create_timer(15, "on_cashout_action_over", true)
+end
+'''
+match_indent = true
+times = 1
+
+
+# Add a is_opponent flag to get_poker_hand_info...
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.FUNCS.get_poker_hand_info = function(_cards)'''
+position = "at"
+payload = '''
+G.FUNCS.get_poker_hand_info = function(_cards, is_opponent)
+'''
+match_indent = true
+times = 1
+
+#... to pass it to evaluate_poker_hand
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''local poker_hands = evaluate_poker_hand(_cards)'''
+position = "at"
+payload = '''
+local poker_hands = evaluate_poker_hand(_cards, is_opponent)
+'''
+match_indent = true
+times = 1
+
+
+#new_round
+# Reset opponent current_round on new round
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.GAME.current_round.used_packs = {}'''
+position = "after"
+payload = '''
+G.GAME.opponent_current_round.discards_left = math.max(0, G.GAME.opponent_round_resets.discards + G.GAME.round_bonus.discards) --TODO: Round bonus opponent
+G.GAME.opponent_current_round.hands_left = (math.max(1, G.GAME.opponent_round_resets.hands + G.GAME.round_bonus.next_hands)) --TODO: Round bonus opponent
+G.GAME.opponent_current_round.hands_played = 0
+G.GAME.opponent_current_round.discards_used = 0
+G.GAME.opponent_current_round.used_packs = {}
+
+            for k, v in pairs(G.GAME.opponent_hands) do 
+                v.played_this_round = 0
+            end
+
+            for k, v in pairs(G.opponent_playing_cards) do
+                v.ability.wheel_flipped = nil
+            end
+    local chaos = opponent_find_joker('Chaos the Clown')
+    G.GAME.opponent_current_round.free_rerolls = #chaos
+
+'''
+match_indent = true
+times = 1
+
+# Trigger opponent joker calculation after new round( since there is no blind selection for the opponent)
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''for i = 1, #G.jokers.cards do
+                G.jokers.cards[i]:calculate_joker({setting_blind = true, blind = G.GAME.round_resets.blind})
+            end'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    for i = 1, #G.opponent_jokers.cards do
+        G.opponent_jokers.cards[i]:opponent_calculate_joker({setting_blind = true, blind = {}}) --empty blind to prevent crash on accessing blind 
+    end
+end
+'''
+match_indent = true
+times = 1
+
+
+# end_round
+# Trigger opponent joker calculation after new round( since there is no blind selection for the opponent)
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''G.jokers.cards[i]:calculate_perishable()
+            end'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    local eval = nil
+    for i = 1, #G.opponent_jokers.cards do
+        eval = G.opponent_jokers.cards[i]:opponent_calculate_joker({end_of_round = true})
+        if eval then
+            opponent_card_eval_status_text(G.opponent_jokers.cards[i], 'jokers', nil, nil, nil, eval)
+        end
+        G.opponent_jokers.cards[i]:calculate_perishable()
+    end
+end
+'''
+match_indent = true
+times = 1
+
+# end_round: Reset for opponent
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''for k, v in ipairs(G.playing_cards) do
+                            v.ability.discarded = nil
+                            v.ability.forced_selection = nil
+                        end'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    opponent_reset_idol_card()
+    opponent_reset_mail_rank()
+    opponent_reset_ancient_card()
+    opponent_reset_castle_card()
+
+    for k, v in ipairs(G.opponent_playing_cards) do
+                            v.ability.discarded = nil
+                            v.ability.forced_selection = nil
+    end
+end
+'''
+match_indent = true
+times = 1
+
+# end_round: handle online card interaction after jokers calculation
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''if game_over then'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.E_MANAGER:add_event(Event({
+        trigger = 'after',
+        func = function()
+            BALATRO_VS_CTX.interaction_context:handle_interaction({end_of_round_after_jokers = true}, {})
+            return true 
+        end 
+    }))
+end
+
+'''
+match_indent = true
+times = 1
+
+# discard_cards_from_highlighted: handle online card interaction before pre_discard
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''inc_career_stat('c_cards_discarded', highlighted_count)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    BALATRO_VS_CTX.interaction_context:handle_interaction({before_pre_discard = true, full_hand = G.hand.highlighted}, {})
+end
+
+'''
+match_indent = true
+times = 1

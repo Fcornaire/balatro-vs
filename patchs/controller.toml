@@ -1,0 +1,22 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+#L_cursor_press: Handle card clik event even if the card is not game clickable (true for card like negate)
+#Also remove the text input hook if any overlay menu (most likely the friendly tab) is open
+[[patches]]
+[patches.pattern]
+target = "engine/controller.lua"
+pattern = '''if press_node then '''
+position = "before"
+payload = '''
+    if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+        BALATRO_VS_CTX.interaction_context:handle_interaction({on_card_click = true}, {target = press_node})
+    end
+
+    if BALATRO_VS_CTX and G.OVERLAY_MENU then
+        G.CONTROLLER.text_input_hook = nil
+    end
+'''
+match_indent = true
+times = 1

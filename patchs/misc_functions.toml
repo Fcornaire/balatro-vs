@@ -1,0 +1,347 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function localize(args, misc_cat)"
+position = "before"
+payload = '''
+    function get_localized_string(key)
+      local strings = {
+          b_versus = "VERSUS",
+          b_versus_matchmaking = "Versus Matchmaking",
+          b_versus_friendlies = "Versus Friendlies",
+          b_versus_friendlies_tip1 = "Share the current code with someone to play (Anyone with this code can join!)",
+          b_versus_friendlies_tip2 = "Or enter/paste your opponent's code here (Case sensitive)",
+          b_versus_friendlies_tip3 = "(Watch out for O (letter) and 0 (number))",
+          b_versus_friendlies_enter_code = "Press Enter to confirm",
+          b_versus_friendlies_paste_code = "Paste opponent code",
+          b_versus_friendlies_start = "Start",
+          b_versus_rematch = "Rematch",
+          b_versus_opponent_disconnected = "Opponent disconnected",
+          b_versurs_lost_round = "You lost",
+          b_versus_won_round = "You won",
+          b_versus_tie_round = "Tie",
+          b_versus_default_dollar_won = "Finishing a round",
+          b_versus_dollar_round_won = "Won a round",
+          b_versus_won = "Won",
+          b_versus_diet_cola_warning = "There is no blind on netplay, tags are useless",
+          b_versus_campfire_warning = "On netplay, Campfire reset every 3 rounds",
+          b_versus_mr_bones_warning = "On netplay, Mr. Bones is useless",
+          b_versus_throwback_warning = "On netplay, Throwback is useless",
+          b_versus_matador_warning = "On netplay, Matador is useless",
+          b_versus_chicot_warning = "On netplay, Chicot is useless",
+          b_versus_hieroglyph_warning = "Useless unless you really want that -1 hand",
+          b_versus_petroglyph_warning = "Useless unless you really want that -1 discard",
+          b_versus_directors_cut_warning = "On netplay, Director's Cut is useless",
+          b_versus_retcon_warning = "On netplay, Retcon is useless"
+      }
+    return strings[key] or ""
+  end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function localize(args, misc_cat)"
+position = "after"
+payload = '''
+        local custom = get_localized_string(tostring(args))  
+        if custom ~= nil and custom ~= '' then
+            return custom
+        end 
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "loc_target = G.localization.descriptions[(args.set or args.node.config.center.set)][args.key or args.node.config.center.key]"
+position = "at"
+payload = '''
+        if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_online_card(args.key) then
+            loc_target = get_localized_description(args.key)
+        else
+          loc_target = G.localization.descriptions[(args.set or args.node.config.center.set)][args.key or args.node.config.center.key]
+        end
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function save_run()"
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    print('not saving on online mode')
+    return
+end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "G.playing_card = (G.playing_card and G.playing_card + 1) or 1"
+position = "after"
+payload = '''
+    if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+        local opponent_card = Card(G.opponent_deck.T.x, G.opponent_deck.T.y, G.CARD_W, G.CARD_H, G.P_CARDS[control.s..'_'..control.r], G.P_CENTERS[control.e or 'c_base'], {playing_card = G.playing_card, is_opponent = true})
+        if control.d then opponent_card:set_edition({[control.d] = true}, true, true) end
+        if control.g then opponent_card:set_seal(control.g, true, true) end
+        G.opponent_deck:emplace(opponent_card)
+        table.insert(G.opponent_playing_cards, opponent_card)
+    end
+'''
+match_indent = true
+times = 1
+
+#Use the correct seed for the opponent at the right time
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function pseudoseed(key, predict_seed)"
+position = "before"
+payload = '''
+function opponent_pseudoseed(key) 
+  if G.GAME.opponent_pseudorandom[key] and not G.GAME.opponent_pseudorandom[key]:is_empty() then
+    local pseudo_random = G.GAME.opponent_pseudorandom[key]:pop_front()
+    return (pseudo_random + (G.GAME.pseudorandom.hashed_seed or 0))/2
+  end
+  return pseudoseed(key,nil,true)
+end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function pseudoseed(key, predict_seed)"
+position = "at"
+payload = '''
+function pseudoseed(key, predict_seed,should_skip_opponent)
+'''
+match_indent = true
+times = 1
+
+#Add player pseudo random key to the opponent to be used later
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = '''G.GAME.pseudorandom[key] = math.abs(tonumber(string.format("%.13f", (2.134453429141+G.GAME.pseudorandom[key]*1.72431234)%1)))'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and not should_skip_opponent then
+    if not G.GAME.opponent_pseudorandom[key] then
+      local vec = VecDeque:new()
+      vec:push_back(G.GAME.pseudorandom[key])
+      G.GAME.opponent_pseudorandom[key] = vec
+    else
+      G.GAME.opponent_pseudorandom[key]:push_back(G.GAME.pseudorandom[key])
+    end
+end
+
+'''
+match_indent = true
+times = 1
+
+
+#Add flag to use opponent seed
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function pseudorandom(seed, min, max)"
+position = "at"
+payload = '''
+function pseudorandom(seed, min, max,is_opponent)
+  if is_opponent and type(seed) == 'string' then
+    seed = opponent_pseudoseed(seed)
+    math.randomseed(seed)
+    if min and max then 
+      return math.random(min, max)
+    else 
+      return math.random() end
+  end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = '''  G.SETTINGS.ambient_control = G.SETTINGS.ambient_control or {}
+  G.ARGS.score_intensity = G.ARGS.score_intensity or {}
+  if type(G.GAME.current_round.current_hand.chips) ~= 'number' or type(G.GAME.current_round.current_hand.mult) ~= 'number' then
+    G.ARGS.score_intensity.earned_score = 0
+  else
+    G.ARGS.score_intensity.earned_score = G.GAME.current_round.current_hand.chips*G.GAME.current_round.current_hand.mult
+  end
+  G.ARGS.score_intensity.required_score = G.GAME.blind and G.GAME.blind.chips or 0
+  G.ARGS.score_intensity.flames = math.min(1, (G.STAGE == G.STAGES.RUN and 1 or 0)*(
+    (G.ARGS.chip_flames and (G.ARGS.chip_flames.real_intensity + G.ARGS.chip_flames.change) or 0))/10)
+  G.ARGS.score_intensity.organ = G.video_organ or G.ARGS.score_intensity.required_score > 0 and math.max(math.min(0.4, 0.1*math.log(G.ARGS.score_intensity.earned_score/(G.ARGS.score_intensity.required_score+1), 5)),0.) or 0'''
+position = "at"
+payload = '''
+    G.SETTINGS.ambient_control = G.SETTINGS.ambient_control or {}
+G.ARGS.score_intensity = G.ARGS.score_intensity or {}
+G.ARGS.opponent_score_intensity = G.ARGS.opponent_score_intensity or {}
+
+if type(G.GAME.current_round.current_hand.chips) ~= 'number' or type(G.GAME.current_round.current_hand.mult) ~= 'number' then
+  G.ARGS.score_intensity.earned_score = 0
+else
+  G.ARGS.score_intensity.earned_score = G.GAME.current_round.current_hand.chips * G.GAME.current_round.current_hand.mult
+end
+
+if type(G.GAME.opponent_current_round.current_hand.chips) ~= 'number' or type(G.GAME.opponent_current_round.current_hand.mult) ~= 'number' then
+  G.ARGS.opponent_score_intensity.earned_score = 0
+else
+  G.ARGS.opponent_score_intensity.earned_score = G.GAME.opponent_current_round.current_hand.chips * G.GAME.opponent_current_round.current_hand.mult
+end
+
+G.ARGS.score_intensity.required_score = G.GAME.blind and G.GAME.blind.chips or 0
+G.ARGS.opponent_score_intensity.required_score = G.GAME.blind and G.GAME.blind.chips or 0
+G.ARGS.score_intensity.flames = math.min(1, (G.STAGE == G.STAGES.RUN and 1 or 0) * (
+  (G.ARGS.chip_flames and (G.ARGS.chip_flames.real_intensity + G.ARGS.chip_flames.change) or 0)) / 10)
+G.ARGS.opponent_score_intensity.flames = math.min(1, (G.STAGE == G.STAGES.RUN and 1 or 0) * (
+  (G.ARGS.chip_flames and (G.ARGS.chip_flames.real_intensity + G.ARGS.chip_flames.change) or 0)) / 10)
+G.ARGS.score_intensity.organ = G.video_organ or
+    G.ARGS.score_intensity.required_score > 0 and
+    math.max(
+    math.min(0.4, 0.1 * math.log(G.ARGS.score_intensity.earned_score / (G.ARGS.score_intensity.required_score + 1),
+      5)), 0.) or 0
+G.ARGS.opponent_score_intensity.organ = G.video_organ or
+    G.ARGS.opponent_score_intensity.required_score > 0 and
+    math.max(
+    math.min(0.4, 0.1 * math.log(G.ARGS.opponent_score_intensity.earned_score / (G.ARGS.opponent_score_intensity.required_score + 1),
+      5)), 0.) or 0
+'''
+match_indent = true
+times = 1
+
+#No inc career stat on online mode
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function inc_career_stat(stat, mod)"
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    return
+end
+'''
+match_indent = true
+times = 1
+
+#Add a is_oppoent flag to the function...
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function set_consumeable_usage(card)"
+position = "at"
+payload = '''
+function set_consumeable_usage(card,is_opponent)
+'''
+match_indent = true
+times = 1
+
+#...to use the appropiate last_tarot_planet used
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "G.GAME.last_tarot_planet = card.config.center_key"
+position = "at"
+payload = '''
+if is_opponent then
+    G.GAME.opponent_last_tarot_planet = card.config.center_key
+else
+    G.GAME.last_tarot_planet = card.config.center_key
+end
+'''
+match_indent = true
+times = 1
+
+#Add a is_oppoent flag to the function...
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = "function evaluate_poker_hand(hand)"
+position = "at"
+payload = '''
+function evaluate_poker_hand(hand,is_opponent)
+'''
+match_indent = true
+times = 1
+
+#...and pass it to get_straight and get_flush
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = '''_flush = get_flush(hand),
+    _straight = get_straight(hand),'''
+position = "at"
+payload = '''
+_flush = get_flush(hand,is_opponent),
+_straight = get_straight(hand,is_opponent),
+'''
+match_indent = true
+times = 1
+
+#Add a is_opponent flag to the function...
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = '''function get_straight(hand)'''
+position = "at"
+payload = '''
+function get_straight(hand,is_opponent)
+'''
+match_indent = true
+times = 1
+
+#get_straight
+#... also use the appropiate find_joker for shortcut joker
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = '''local can_skip = next(find_joker('Shortcut'))'''
+position = "at"
+payload = '''
+local can_skip = is_opponent and next(opponent_find_joker('Shortcut')) or next(find_joker('Shortcut'))
+'''
+match_indent = true
+times = 1
+
+
+#Add a is_opponent flag to the function...
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = '''function get_flush(hand)'''
+position = "at"
+payload = '''
+function get_flush(hand,is_opponent)
+'''
+match_indent = true
+times = 1
+
+#...and use the appropiate find_joker
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = '''local four_fingers = next(find_joker('Four Fingers'))'''
+position = "at"
+payload = '''
+local four_fingers =  is_opponent and next(opponent_find_joker('Four Fingers')) or next(find_joker('Four Fingers'))
+'''
+match_indent = true
+times = 2
