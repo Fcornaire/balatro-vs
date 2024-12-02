@@ -1,0 +1,626 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = "e.config.button = 'play_cards_from_highlighted'"
+position = "before"
+payload = '''
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    e.config.button = 'lock_highlighted_card'
+    return
+end
+
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''  if hook.config.ref_table.extended_corpus then '''
+position = "before"
+payload = '''
+corpus = '.:0' .. corpus
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.sort_hand_suit = function(e)'''
+position = "after"
+payload = '''
+G.FUNCS.network_player_sort_hand_suit()
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.sort_hand_value = function(e)'''
+position = "after"
+payload = '''
+G.FUNCS.network_player_sort_hand_value()
+'''
+match_indent = true
+times = 1
+
+
+# When cashout, we have to shuffle opponent deck
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.deck:shuffle('cashout'..G.GAME.round_resets.ante)'''
+position = "after"
+payload = '''
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.opponent_deck:shuffle('cashout'..G.GAME.round_resets.ante)
+    G.opponent_deck:hard_set_T()
+end
+
+'''
+match_indent = true
+times = 1
+
+
+# When cashout, reset hand left and discard left
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.GAME.current_round.hands_left = (math.max(1, G.GAME.round_resets.hands + G.GAME.round_bonus.next_hands))'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.GAME.opponent_current_round.discards_left = math.max(0, G.GAME.opponent_round_resets.discards + G.GAME.opponent_round_bonus.discards)
+    G.GAME.opponent_current_round.hands_left = (math.max(1, G.GAME.opponent_round_resets.hands + G.GAME.opponent_round_bonus.next_hands))
+end
+
+'''
+match_indent = true
+times = 1
+
+# When cashout, prevent chips easing to 0 on netplay
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''ease_chips(0)'''
+position = "at"
+payload = '''
+if not BALATRO_VS_CTX or not BALATRO_VS_CTX.network.is_live then
+    ease_chips(0)
+end
+'''
+match_indent = true
+times = 1
+
+# Make opponent use consumeable card from consumeables or pack area
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''if card:check_use() then '''
+position = "before"
+payload = '''
+    if BALATRO_VS_CTX 
+        and BALATRO_VS_CTX.network.is_live 
+        and not is_opponent 
+        and card.area -- No area here mean it's was detached from the shop jokers, those event are already handled by shop event
+    then
+        local index = card:get_index_from_area()
+        if index > 0 then
+            if card.area == G.consumeables then
+                local highlighted = G.consumeables:get_highlighted_cards_index()
+                local targets = {}
+                 if is_online_card(card.ability.name) and card.ability.targets and #card.ability.targets > 0 then
+                    for i, card in ipairs(card.ability.targets) do
+                        table.insert(targets, card:to_card_conf('joker'))
+                    end
+                end
+                G.FUNCS.network_player_use_consumeable_card(index, "consumeables", highlighted, targets)
+            elseif card.ability.consumeable then
+                local highlighted = G.pack_cards:get_highlighted_cards_index()
+                G.FUNCS.network_player_use_consumeable_card(index,"pack_cards", highlighted, {})
+            end
+        end
+
+        if card.ability.set == 'Voucher' then
+            G.FUNCS.network_player_use_voucher_card(card)
+        end
+
+        if card.ability.set == 'Joker' then
+            G.FUNCS.network_send_new_card_from_booster(index)
+        end
+
+        if card.ability.set == 'Booster' then
+            local shop_jokers_cards = {}
+            for i, card in ipairs(G.shop_jokers.cards) do
+                table.insert(shop_jokers_cards, card)
+            end
+            G.FUNCS.network_send_open_booster(card, shop_jokers_cards)
+        end
+
+        if card.ability.set == 'Enhanced' or card.ability.set == 'Default' then
+            G.FUNCS.network_send_new_card_from_booster(index)
+        end
+    end
+'''
+match_indent = true
+times = 1
+
+#Use_Card: Place Default/Enhance card in the right area
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.deck:emplace(card)'''
+position = "at"
+payload = '''
+if is_opponent then
+    G.opponent_deck:emplace(card)
+else
+    G.deck:emplace(card)
+end
+'''
+match_indent = true
+times = 1
+
+#Use_Card: Insert in the appropriate playing card 
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''table.insert(G.playing_cards, card)'''
+position = "at"
+payload = '''
+if is_opponent then
+    table.insert(G.opponent_playing_cards, card)
+else
+    table.insert(G.playing_cards, card)
+end
+'''
+match_indent = true
+times = 1
+
+#Use_card: Patching use card function to add an extra boolean parameter...
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = ''' G.FUNCS.use_card = function(e, mute, nosave)'''
+position = "at"
+payload = '''
+G.FUNCS.use_card = function(e, mute, nosave, is_opponent) 
+'''
+match_indent = true
+times = 1
+
+#use_card
+#...to use the correct functions (consumeables and joker calculation) if it's the opponent
+#Also use the correct effect for online cards
+#Also, handle online interaction for using consumeable
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''e.config.ref_table:use_consumeable(area)
+      for i = 1, #G.jokers.cards do
+        G.jokers.cards[i]:calculate_joker({using_consumeable = true, consumeable = card})
+      end'''
+position = "at"
+payload = '''
+    if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_online_card(e.config.ref_table.ability.name) then
+        BALATRO_VS_CTX.interaction_context:handle_interaction({on_use = true}, {})
+    elseif is_opponent then
+        BALATRO_VS_CTX.interaction_context:handle_interaction({before_using_consumeable = true,consumeable = card}, {})
+        G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                delay = 1.5,
+                func = function()
+                        e.config.ref_table:opponent_use_consumeable(area)
+                        for i = 1, #G.opponent_jokers.cards do
+                            G.opponent_jokers.cards[i]:calculate_joker({using_consumeable = true, consumeable = card})
+                        end
+                    return true
+                end
+            }))
+
+    else
+        BALATRO_VS_CTX.interaction_context:handle_interaction({before_using_consumeable = true,consumeable = card}, {})
+        G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                delay = 1.5,
+                func = function()
+                    e.config.ref_table:use_consumeable(area)
+                    for i = 1, #G.jokers.cards do
+                        G.jokers.cards[i]:calculate_joker({using_consumeable = true, consumeable = card})
+                    end
+                    return true
+                end
+            }))
+    end  
+'''
+match_indent = true
+times = 1
+
+#Use_Card: ...use the appropriate card joker effects if it's the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''playing_card_joker_effects({card})'''
+position = "at"
+payload = '''
+if is_opponent then
+    opponent_playing_card_joker_effects({card})
+else
+    playing_card_joker_effects({card})
+end
+'''
+match_indent = true
+times = 1
+
+#Use_Card: ...Place joker in the right area
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.jokers:emplace(card)'''
+position = "at"
+payload = '''
+if is_opponent then
+    G.opponent_jokers:emplace(card)
+else
+    G.jokers:emplace(card)
+end
+'''
+match_indent = true
+times = 1
+
+#Use_Card: Also, use the appropriate end_consumeables if it's the opponent 
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.end_consumeable(nil, delay_fac)'''
+position = "at"
+payload = '''
+if is_opponent then
+    G.FUNCS.end_consumeable(nil, delay_fac,true)
+else
+    G.FUNCS.end_consumeable(nil, delay_fac)
+end 
+'''
+match_indent = true
+times = 1
+
+
+#Use_Card: When using a card, if it's the opponent, we don't want to end the pack choice
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''if area == G.consumeables then'''
+position = "at"
+payload = '''
+if area == G.consumeables or area == G.opponent_consumeables then
+'''
+match_indent = true
+times = 1
+
+
+#Also, acknowledge when opponent selected a card from the pack
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.GAME.pack_choices = G.GAME.pack_choices - 1'''
+position = "after"
+payload = '''
+if is_opponent then
+    --flip back flipped card
+    for i, card in ipairs(G.opponent_hand.cards) do
+        if card.facing == 'front' then
+            card:flip()
+        end
+    end
+
+    G.E_MANAGER:add_event(Event({
+        trigger = 'after',
+        delay = 0.1,
+        func = function()
+            G.FUNCS.game_manipulation_acknowledge_event()
+            return true
+        end
+    }))
+end
+'''
+match_indent = true
+times = 1
+
+
+# Add a boolean parameter to the end_consumeable function...
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.end_consumeable = function(e, delayfac)'''
+position = "at"
+payload = '''
+G.FUNCS.end_consumeable = function(e, delayfac, is_opponent)
+'''
+match_indent = true
+times = 1
+
+#...to acknowledge the end of opponent's end_consumeable card
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.2*delayfac,
+          func = function()
+            save_run()
+            return true
+      end}))'''
+position = "after"
+payload = '''
+if is_opponent and BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.E_MANAGER:add_event(Event({
+        trigger = 'immediate',
+        func = function()
+            if BALATRO_VS_CTX.is_in_shop_and_ready then
+                G.FUNCS.game_manipulation_acknowledge_event()
+            end
+            return true
+        end
+    }))
+end
+'''
+match_indent = true
+times = 1
+
+#Use the approriate draw function if it's the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.draw_from_hand_to_deck()'''
+position = "at"
+payload = '''
+if is_opponent then
+    G.FUNCS.opponent_draw_from_his_hand_to_his_deck()
+else
+    G.FUNCS.draw_from_hand_to_deck()
+end
+'''
+match_indent = true
+times = 1
+
+#Tell opponent to skip booster
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.skip_booster = function(e)'''
+position = "at"
+payload = '''
+G.FUNCS.skip_booster = function(e,is_opponent)
+    if not is_opponent and BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+        G.FUNCS.network_player_skip_booster()
+    end
+'''
+match_indent = true
+times = 1
+
+
+#For skipping blind select after ending the shop
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.STATE = G.STATES.BLIND_SELECT'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.GAME.round_resets.blind = {} -- Fake blind to prevent crash on accessing blind
+    G.STATE = SELECTING_HAND -- Fake state to prevent shop re opening
+    new_round() -- this will apply the correct state
+    BALATRO_VS_CTX.rounds_played = BALATRO_VS_CTX.rounds_played + 1 
+else
+    G.STATE = G.STATES.BLIND_SELECT
+end
+'''
+match_indent = true
+times = 1
+
+#Buy_from_shop: Tell opponent bought card from the shop after space check
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''return false
+        end
+      end'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+  local id = e.config.id or ''
+  local type = ''
+
+  if c1.ability.set == 'Default' or c1.ability.set == 'Enhanced' then
+    type = 'card'
+  elseif e.config.id ~= 'buy_and_use' then
+    if c1.ability.consumeable then
+      type = 'consumeable'
+    else
+      type = 'joker'
+    end
+  else
+    print('set', c1.config.center.set)
+    if c1.config.center.set == 'Planet' or c1.config.center.set == 'Tarot' then
+      type = 'consumeable'
+    end
+  end
+
+  on_send_bought_card(c1, type, id)
+end
+'''
+match_indent = true
+times = 1
+
+#Tell opponent how much $ when cash out
+#Also trigger online interaction for cashout
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''ease_dollars(G.GAME.current_round.dollars)'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    on_cash_out(G.GAME.dollars + G.GAME.current_round.dollars,false)
+    BALATRO_VS_CTX.interaction_context:handle_interaction({on_cashout = true}, {})
+end
+'''
+match_indent = true
+times = 1
+
+# toggle_shop
+#Trigger joker calculation for opponent when ending shop
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''for i = 1, #G.jokers.cards do
+        G.jokers.cards[i]:calculate_joker({ending_shop = true})
+      end'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    for i = 1, #G.opponent_jokers.cards do
+        G.opponent_jokers.cards[i]:opponent_calculate_joker({ending_shop = true})
+      end
+end
+'''
+match_indent = true
+times = 1
+
+# reroll_shop
+# Tell the opponent that the player rerolled the shop
+# The opponent doesn't need to know the result of the reroll because every shopped card is sent to the opponent directly
+# He only needs to know that the player rerolled the shop for joker calculation
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.reroll_shop = function(e) '''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    on_reroll_shop()
+end
+'''
+match_indent = true
+times = 1
+
+# go_to_menu : Restore view when going back to main menu
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.go_to_menu = function(e)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX then
+    G.TILE_W = ORIG_RENDER_SCALE.TILE_W
+    G.TILE_H = ORIG_RENDER_SCALE.TILE_H
+    G.TILESCALE = ORIG_RENDER_SCALE.TILESCALE
+end
+'''
+match_indent = true
+times = 1
+
+# run_info: prevent pausing the game if on netplay
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.run_info = function(e)
+  G.SETTINGS.paused = true'''
+position = "at"
+payload = '''
+G.FUNCS.run_info = function(e)
+  if not BALATRO_VS_CTX or not BALATRO_VS_CTX.network.is_live then
+    G.SETTINGS.paused = true
+  end
+'''
+match_indent = true
+times = 1
+
+
+# can_skip_booster: Prevent player being able to skip opponent booster
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''if G.pack_cards and (G.pack_cards.cards[1]) and'''
+position = "after"
+payload = '''
+(not BALATRO_VS_CTX or not BALATRO_VS_CTX.network.is_live or (BALATRO_VS_CTX.network.is_live and not G.pack_cards.cards[1].params.is_opponent)) and
+'''
+match_indent = true
+times = 1
+
+# buy_from_shop: Register online interaction if it's an online card when buying from shop
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.buy_from_shop = function(e)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if is_online_card(e.config.ref_table.ability.name) then
+        if not register_online_interaction(e.config.ref_table) then
+            print('Failed to register online interaction for card: ' .. e.config.ref_table.ability.name)
+        end
+    end
+end
+'''
+match_indent = true
+times = 1
+
+
+# options: Prevent on netplay
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.options = function(e)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    return
+end
+'''
+match_indent = true
+times = 1
+
+# change_tab : Quit server if changing tab
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.change_tab = function(e)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and e and e.config and e.config.ref_table and e.config.ref_table.label then
+    local label = e.config.ref_table.label
+    if label == localize('b_versus_friendlies') or label == localize('b_versus_matchmaking') then
+        if network_quit_matchmaking then
+            network_quit_matchmaking()
+        end    
+    end
+end
+'''
+match_indent = true
+times = 1
+
+# exit_overlay_menu :  Quit server if connected and exiting overlay menu
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''if not G.OVERLAY_MENU then return end'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX then    
+    if network_quit_matchmaking then
+        network_quit_matchmaking()
+    end    
+end
+'''
+match_indent = true
+times = 1
+

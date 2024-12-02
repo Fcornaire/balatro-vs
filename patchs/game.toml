@@ -1,0 +1,552 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+
+#For skiping the blind select
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''self:prep_stage(G.STAGES.RUN, saveTable and saveTable.STATE or G.STATES.BLIND_SELECT)'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+   self:prep_stage(G.STAGES.RUN, G.STATES.DRAW_TO_HAND)
+else
+    self:prep_stage(G.STAGES.RUN, saveTable and saveTable.STATE or G.STATES.DRAW_TO_HAND)
+end
+'''
+match_indent = true
+times = 1
+
+#Initialize opponent round_reset
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''self.GAME.current_round.reroll_cost = self.GAME.base_reroll_cost'''
+position = "after"
+payload = '''
+self.GAME.opponent_round_resets.hands = self.GAME.starting_params.hands
+self.GAME.opponent_round_resets.discards = self.GAME.starting_params.discards
+self.GAME.opponent_round_resets.reroll_cost = self.GAME.starting_params.reroll_cost
+self.GAME.opponent_round_resets.reroll_cost = self.GAME.base_reroll_cost
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''{card_limit = self.GAME.starting_params.hand_size, type = 'hand'})'''
+position = "after"
+payload = '''
+ -- Initialize opponent
+
+    G.opponent_playing_cards = {}
+
+    self.opponent_consumeables = CardArea(
+        0, 0,
+        CAI.consumeable_W,
+        CAI.consumeable_H, 
+        {card_limit = self.GAME.starting_params.consumable_slots, type = 'joker', highlight_limit = 1})
+    self.opponent_hand = CardArea(
+        0, 0,
+        CAI.hand_W,CAI.hand_H, 
+        {card_limit = self.GAME.starting_params.hand_size, type = 'hand'})
+    self.opponent_deck = CardArea(
+        17.2, 0,
+        CAI.deck_W,CAI.deck_H, 
+        {card_limit = 52, type = 'deck'})
+    self.opponent_jokers = CardArea(
+        0, 0,
+        CAI.joker_W,
+        CAI.joker_H, 
+        {card_limit = self.GAME.starting_params.joker_slots, type = 'joker', highlight_limit = 1})
+    self.opponent_play = CardArea(
+        0, 0,
+        CAI.play_W,CAI.play_H, 
+        {card_limit = 5, type = 'play'})
+    self.opponent_discard = CardArea(
+        0, 0,
+        CAI.discard_W,CAI.discard_H,
+        {card_limit = 500, type = 'discard'})
+'''
+match_indent = true
+times = 1
+
+# Draw opponent hand
+# Also unlock the player hand if locked (mainly because it was locked by discard)
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''if G.GAME.current_round.hands_played == 0 and'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if G.GAME.opponent_current_round.hands_left > 0 then
+        G.FUNCS.opponent_draw_from_his_deck_to_his_hand(nil) -- TODO: When player discard, this get triggered again but nothing happen because the hand should be full ?
+    end
+
+    G.E_MANAGER:add_event(Event({
+            trigger = 'after',
+            func = function()
+                G.hand:unlock()
+                return true
+            end
+        }))
+end
+'''
+match_indent = true
+times = 1
+
+# Hard lock player hand if no more hands left
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''if G.FUNCS.draw_from_deck_to_hand(nil) then
+                    return true
+                end'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if G.GAME.current_round.hands_left > 0 then
+        if G.FUNCS.draw_from_deck_to_hand(nil) then
+            return true
+        end
+    else 
+        print('No more hands left')
+        G.hand:hard_lock()
+        G.FUNCS.game_manipulation_acknowledge_event()
+         G.STATE_COMPLETE = true
+    end
+else
+    if G.FUNCS.draw_from_deck_to_hand(nil) then
+        return true
+    end
+end
+'''
+match_indent = true
+times = 1
+
+#Play turn has ended, we can treat opponent event again
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''G.E_MANAGER:add_event(Event({
+                    trigger = 'immediate',
+                    func = function()
+                    G.STATE = G.STATES.SELECTING_HAND
+                    G.STATE_COMPLETE = false
+                    G.GAME.blind:drawn_to_hand()
+                    return true
+                    end
+                }))'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.E_MANAGER:add_event(Event({
+         trigger = 'after',
+         func = function()
+            --Play turn has ended, we can treat opponent event again
+            if not BALATRO_VS_CTX.is_in_shop_and_ready then
+                G.FUNCS.game_manipulation_acknowledge_event()
+            end
+
+            return true
+         end
+     }))
+end
+'''
+match_indent = true
+times = 1
+
+# Start_run: shuffle opponent deck and resets
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''reset_castle_card()'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    self.opponent_deck:shuffle()
+    self.opponent_deck:hard_set_T()
+    opponent_reset_idol_card()
+    opponent_reset_mail_rank()
+    self.GAME.opponent_current_round.ancient_card.suit = nil
+    opponent_reset_ancient_card()
+    opponent_reset_castle_card()
+end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''hands = {'''
+position = "before"
+payload = '''
+    opponent_hands = {
+            ["Flush Five"] =        {visible = false,   order = 1, mult = 16,  chips = 160, s_mult = 16,  s_chips = 160, level = 1, l_mult = 3, l_chips = 50, played = 0, played_this_round = 0, example = {{'S_A', true},{'S_A', true},{'S_A', true},{'S_A', true},{'S_A', true}}},
+            ["Flush House"] =       {visible = false,   order = 2, mult = 14,  chips = 140, s_mult = 14,  s_chips = 140, level = 1, l_mult = 4, l_chips = 40, played = 0, played_this_round = 0, example = {{'D_7', true},{'D_7', true},{'D_7', true},{'D_4', true},{'D_4', true}}},
+            ["Five of a Kind"] =    {visible = false,   order = 3, mult = 12,  chips = 120, s_mult = 12,  s_chips = 120, level = 1, l_mult = 3, l_chips = 35, played = 0, played_this_round = 0, example = {{'S_A', true},{'H_A', true},{'H_A', true},{'C_A', true},{'D_A', true}}},
+            ["Straight Flush"] =    {visible = true,    order = 4, mult = 8,   chips = 100, s_mult = 8,   s_chips = 100, level = 1, l_mult = 4, l_chips = 40, played = 0, played_this_round = 0, example = {{'S_Q', true},{'S_J', true},{'S_T', true},{'S_9', true},{'S_8', true}}},
+            ["Four of a Kind"] =    {visible = true,    order = 5, mult = 7,   chips = 60,  s_mult = 7,   s_chips = 60,  level = 1, l_mult = 3, l_chips = 30, played = 0, played_this_round = 0, example = {{'S_J', true},{'H_J', true},{'C_J', true},{'D_J', true},{'C_3', false}}},
+            ["Full House"] =        {visible = true,    order = 6, mult = 4,   chips = 40,  s_mult = 4,   s_chips = 40,  level = 1, l_mult = 2, l_chips = 25, played = 0, played_this_round = 0, example = {{'H_K', true},{'C_K', true},{'D_K', true},{'S_2', true},{'D_2', true}}},
+            ["Flush"] =             {visible = true,    order = 7, mult = 4,   chips = 35,  s_mult = 4,   s_chips = 35,  level = 1, l_mult = 2, l_chips = 15, played = 0, played_this_round = 0, example = {{'H_A', true},{'H_K', true},{'H_T', true},{'H_5', true},{'H_4', true}}},
+            ["Straight"] =          {visible = true,    order = 8, mult = 4,   chips = 30,  s_mult = 4,   s_chips = 30,  level = 1, l_mult = 3, l_chips = 30, played = 0, played_this_round = 0, example = {{'D_J', true},{'C_T', true},{'C_9', true},{'S_8', true},{'H_7', true}}},
+            ["Three of a Kind"] =   {visible = true,    order = 9, mult = 3,   chips = 30,  s_mult = 3,   s_chips = 30,  level = 1, l_mult = 2, l_chips = 20, played = 0, played_this_round = 0, example = {{'S_T', true},{'C_T', true},{'D_T', true},{'H_6', false},{'D_5', false}}},
+            ["Two Pair"] =          {visible = true,    order = 10,mult = 2,   chips = 20,  s_mult = 2,   s_chips = 20,  level = 1, l_mult = 1, l_chips = 20, played = 0, played_this_round = 0, example = {{'H_A', true},{'D_A', true},{'C_Q', false},{'H_4', true},{'C_4', true}}},
+            ["Pair"] =              {visible = true,    order = 11,mult = 2,   chips = 10,  s_mult = 2,   s_chips = 10,  level = 1, l_mult = 1, l_chips = 15, played = 0, played_this_round = 0, example = {{'S_K', false},{'S_9', true},{'D_9', true},{'H_6', false},{'D_3', false}}},
+            ["High Card"] =         {visible = true,    order = 12,mult = 1,   chips = 5,   s_mult = 1,   s_chips = 5,   level = 1, l_mult = 1, l_chips = 10, played = 0, played_this_round = 0, example = {{'S_A', true},{'D_Q', false},{'D_9', false},{'C_4', false},{'D_3', false}}},
+        },
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''current_round = {'''
+position = "before"
+payload = '''
+opponent_joker_buffer = 0,
+opponent_used_jokers = {},
+opponent_edition_rate = 1,
+opponent_probabilities = {
+            normal = 1,
+        },
+opponent_last_tarot_planet = nil,
+opponent_pseudorandom = {},
+opponent_used_vouchers = {},
+opponent_bankrupt_at = 0,
+opponent_consumeable_buffer = 0,
+opponent_round_resets = {
+            hands = 1, 
+            discards = 1,
+            reroll_cost = 1,
+            temp_reroll_cost = nil,
+            temp_handsize = nil,
+            ante = 1,
+            blind_ante = 1,
+            blind_states = {Small = 'Select', Big = 'Upcoming', Boss = 'Upcoming'},
+            loc_blind_states = {Small = '', Big = '', Boss = ''},
+            blind_choices = {Small = 'bl_small', Big = 'bl_big'},
+            boss_rerolled = false,
+},
+opponent_round_scores = {
+            furthest_ante = {label = 'Ante', amt = 0},
+            furthest_round = {label = 'Round', amt = 0},
+            hand = {label = 'Best Hand', amt = 0},
+            poker_hand = {label = 'Most Played Hand', amt = 0},
+            new_collection = {label = 'New Discoveries', amt = 0},
+            cards_played = {label = 'Cards Played', amt = 0},
+            cards_discarded = {label = 'Cards Discarded', amt = 0},
+            times_rerolled = {label = 'Times Rerolled', amt = 0},
+            cards_purchased = {label = 'Cards Purchased', amt = 0},
+        },
+opponent_shop = {
+            joker_max = 2,
+        },
+opponent_hands_played = 0,
+opponent_current_round = {
+            current_hand = {
+                chips = 0,
+                chip_text = '0',
+                mult = 0,
+                mult_text = '0',
+                chip_total = 0,
+                chip_total_text = '',
+                handname = "",
+                hand_level = ''
+            },
+            used_packs = {},
+            cards_flipped = 0,
+            round_text = 'Round ',
+            idol_card = {suit = 'Spades', rank = 'Ace'},
+            mail_card = {rank = 'Ace'},
+            ancient_card = {suit = 'Spades'},
+            castle_card = {suit = 'Spades'},
+            hands_left = 0,
+            hands_played = 0,
+            discards_left = 0,
+            discards_used = 0,
+            dollars = 0,
+            reroll_cost = 5,
+            reroll_cost_increase = 0,
+            jokers_purchased = 0,
+            free_rerolls = 0,
+            round_dollars = 0,
+            dollars_to_be_earned = '!!!',
+            most_played_poker_hand = 'High Card',
+        },
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''G.hand_text_area = {'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.opponent_hand_text_area = {
+        chips = self.HUD:get_UIE_by_ID('opponent_hand_chips'),
+        mult = self.HUD:get_UIE_by_ID('opponent_hand_mult'),
+        round = self.HUD:get_UIE_by_ID('opponent_round_UI_count'),
+        chip_total = self.HUD:get_UIE_by_ID('opponent_hand_chip_total'),
+        handname = self.HUD:get_UIE_by_ID('opponent_hand_name'),
+        hand_level = self.HUD:get_UIE_by_ID('opponent_hand_level'),
+        game_chips = self.HUD:get_UIE_by_ID('opponent_chip_UI_count'),
+    }
+end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''self.GAME.dollars = self.GAME.starting_params.dollars'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    self.opponent_dollars = self.GAME.starting_params.dollars
+end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''self.HUD = UIBox{'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.GAME.opponent_current_round = copy_table(G.GAME.current_round)
+end
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''chips_text = '0','''
+position = "after"
+payload = '''
+opponent_chips = 0,
+opponent_chips_text = '0',
+round_won = 0,
+round_won_text = '0',
+opponent_round_won = 0,
+opponent_round_won_text = '0',
+'''
+match_indent = true
+times = 1
+
+# Keep drawing until no more hands left
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''if G.GAME.chips - G.GAME.blind.chips >= 0 or G.GAME.current_round.hands_left < 1 then
+            G.STATE = G.STATES.NEW_ROUND
+        else
+            G.STATE = G.STATES.DRAW_TO_HAND
+        end'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if G.GAME.current_round.hands_left == 0 and G.GAME.opponent_current_round.hands_left == 1  --1 because opponent hand not eased yet
+    or G.GAME.current_round.hands_left == 0 and G.GAME.opponent_current_round.hands_left == 0 then --or it has  
+        self.STATE = self.STATES.NEW_ROUND
+    else
+        self.STATE = self.STATES.DRAW_TO_HAND
+    end
+else
+    if G.GAME.chips - G.GAME.blind.chips >= 0 or G.GAME.current_round.hands_left < 1 then
+            G.STATE = G.STATES.NEW_ROUND
+        else
+            G.STATE = G.STATES.DRAW_TO_HAND
+    end
+end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''max_jokers = 0,'''
+position = "after"
+payload = '''
+opponent_dollars = 0,
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''self.GAME.dollars = self.GAME.starting_params.dollars'''
+position = "after"
+payload = '''
+self.GAME.opponent_dollars = self.GAME.starting_params.dollars
+'''
+match_indent = true
+times = 1
+
+# Add opponent bonus
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''round_bonus = {'''
+position = "before"
+payload = '''
+opponent_round_bonus = {
+    next_hands = 0,
+    discards = 0,
+},
+'''
+match_indent = true
+times = 1
+
+# Use appropriate draw function for opponent Arcana/Spectral booster
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''G.FUNCS.draw_from_deck_to_hand()'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and BALATRO_VS_CTX.is_in_shop_and_ready then
+    G.FUNCS.opponent_draw_from_his_deck_to_his_hand()
+
+    G.E_MANAGER:add_event(Event({
+        trigger = 'after',
+        delay = 1.5,
+        func = function()
+            G.FUNCS.game_manipulation_acknowledge_event() -- Acknowledge opponent drawn card after booster opening
+            return true
+        end
+    }))
+
+else
+    G.FUNCS.draw_from_deck_to_hand()
+
+    --Some card might be locked because of the previous round
+    G.E_MANAGER:add_event(Event({
+            trigger = 'after',
+            func = function()
+                G.hand:unlock()
+                return true
+            end
+        }))
+end
+'''
+match_indent = true
+times = 2
+
+# Update_draw_to_hand: ignore facing blind and trigger joker (online too) calculation at first hand drawn
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''if G.GAME.current_round.hands_played == 0 and
+                    G.GAME.current_round.discards_used == 0 and G.GAME.facing_blind then
+                    for i = 1, #G.jokers.cards do
+                        G.jokers.cards[i]:calculate_joker({first_hand_drawn = true})
+                    end
+                end'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if G.GAME.current_round.hands_played == 0 and
+                    G.GAME.current_round.discards_used == 0 then
+                    BALATRO_VS_CTX.interaction_context:handle_interaction({first_hand_drawn_joker = true}, {}) -- Trigger online specific joker interaction
+
+                    for i = 1, #G.jokers.cards do
+                        G.jokers.cards[i]:calculate_joker({first_hand_drawn = true})
+                    end
+                end
+    
+    if G.GAME.opponent_current_round.hands_played == 0 and
+        G.GAME.opponent_current_round.discards_used == 0 then
+        for i = 1, #G.opponent_jokers.cards do
+            G.opponent_jokers.cards[i]:opponent_calculate_joker({first_hand_drawn = true})
+        end
+    end
+else
+    if G.GAME.current_round.hands_played == 0 and
+                    G.GAME.current_round.discards_used == 0 and G.GAME.facing_blind then
+                    for i = 1, #G.jokers.cards do
+                        G.jokers.cards[i]:calculate_joker({first_hand_drawn = true})
+                    end
+                end
+end
+'''
+match_indent = true
+times = 1
+
+# init_item_prototypes: Add online specific card when starting a new game
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''function Game:init_item_prototypes()'''
+position = "after"
+payload = '''
+initialize_online_cards(self)
+'''
+match_indent = true
+times = 1
+
+
+# update_shop: check and add an online card
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''if G.load_shop_vouchers then'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    local has_won_round = G.GAME.opponent_chips < G.GAME.chips
+    local rate = has_won_round and 0.7 or 0.5
+    local seed = has_won_round and 'online_card_w' or 'online_card'
+
+    if pseudorandom(seed) >= rate then
+        G.shop_jokers.config.card_limit = G.shop_jokers.config.card_limit + 1
+        G.shop_jokers.T.w = G.shop_jokers.config.card_limit * 1.01 * G.CARD_W
+        G.shop:recalculate()
+
+        local random_online_center = pseudorandom_element(G.ONLINE_CENTERS,pseudoseed(seed))
+
+        local card = Card(G.shop_jokers.T.x,
+        G.shop_jokers.T.y, G.CARD_W, G.CARD_H, G.P_CARDS.empty, random_online_center,
+        { bypass_discovery_center = true, bypass_discovery_ui = true,bypass_lock=true })
+
+        card:start_materialize()
+        G.shop_jokers:emplace(card)
+
+        create_shop_card_ui(card, card.type, G.shop_jokers)
+
+    end
+end
+'''
+match_indent = true
+times = 1
+
+# main_menu: Get the latest mod version every time we go to the main menu
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''if change_context ~= 'splash' then '''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and updater_get_and_update_last_version then
+    updater_get_and_update_last_version()
+end
+'''
+match_indent = true
+times = 1

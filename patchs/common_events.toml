@@ -1,0 +1,635 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''if context.cardarea == G.play then'''
+position = "at"
+payload = '''
+    if context.cardarea == G.play or context.cardarea == G.opponent_play then
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''if context.cardarea == G.hand then'''
+position = "at"
+payload = '''
+    if context.cardarea == G.hand or context.cardarea == G.opponent_hand then
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''if context.cardarea == G.jokers or context.card == G.consumeables then'''
+position = "at"
+payload = '''
+    if context.cardarea == G.jokers or context.cardarea == G.consumeables or context.cardarea == G.opponent_jokers or context.cardarea == G.opponent_consumeables then
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''if card.area == G.jokers or card.area == G.consumeables then'''
+position = "at"
+payload = '''
+    if card.area == G.jokers or card.area == G.consumeables or card.area == G.opponent_jokers or card.area == G.opponent_consumeables then
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''elseif card.area == G.hand then'''
+position = "at"
+payload = '''
+    elseif card.area == G.hand or card.area == G.opponent_hand then
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''elseif card.area == G.play then'''
+position = "at"
+payload = '''
+    elseif card.area == G.play or card.area == G.opponent_play then
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''table.insert(left_text, {n=G.UIT.O, config={w=1.2,h=1.2 , object = blind_sprite, hover = true, can_collide = false}})'''
+position = "at"
+payload = '''
+    if not BALATRO_VS_CTX or not BALATRO_VS_CTX.network.is_live then
+        table.insert(left_text, { n = G.UIT.O, config = { w = 1.2, h = 1.2, object = blind_sprite, hover = true, can_collide = false } })
+    end
+'''
+match_indent = true
+times = 1
+
+#Add netplay round eval
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''table.insert(left_text,                  
+                    config.saved and 
+                    {n=G.UIT.C, config={padding = 0.05, align = 'cm'}, nodes={
+                        {n=G.UIT.R, config={align = 'cm'}, nodes={
+                            {n=G.UIT.O, config={object = DynaText({string = {' '..localize('ph_mr_bones')..' '}, colours = {G.C.FILTER}, shadow = true, pop_in = 0, scale = 0.5*scale, silent = true})}}
+                        }}
+                    }}
+                    or {n=G.UIT.C, config={padding = 0.05, align = 'cm'}, nodes={
+                        {n=G.UIT.R, config={align = 'cm'}, nodes={
+                            {n=G.UIT.O, config={object = DynaText({string = {' '..localize('ph_score_at_least')..' '}, colours = {G.C.UI.TEXT_LIGHT}, shadow = true, pop_in = 0, scale = 0.4*scale, silent = true})}}
+                        }},
+                        {n=G.UIT.R, config={align = 'cm', minh = 0.8}, nodes={
+                            {n=G.UIT.O, config={w=0.5,h=0.5 , object = stake_sprite, hover = true, can_collide = false}},
+                            {n=G.UIT.T, config={text = G.GAME.blind.chip_text, scale = scale_number(G.GAME.blind.chips, scale, 100000), colour = G.C.RED, shadow = true}}
+                        }}
+                    }})'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and config.name == 'blind1' then
+    local text = G.GAME.opponent_chips < G.GAME.chips and localize('b_versus_won_round') 
+        or (G.GAME.opponent_chips > G.GAME.chips and localize('b_versurs_lost_round') or localize('b_versus_tie_round'))
+
+    table.insert(left_text, {
+        n = G.UIT.C,
+        config = { padding = 0.05, align = 'cm' },
+        nodes = {
+            {
+                n = G.UIT.R,
+                config = { align = 'cm' },
+                nodes = {
+                    { n = G.UIT.O, config = { object = DynaText({ string = { text }, colours = { G.C.DARK_EDITION }, shadow = true, float = true, spacing = 10, rotate = true, scale = 1.5, pop_in = 0.4, maxw = 6.5 }) } },
+                }
+            }
+        }
+    })
+else
+    table.insert(left_text,
+        config.saved and
+        {
+            n = G.UIT.C,
+            config = { padding = 0.05, align = 'cm' },
+            nodes = {
+                {
+                    n = G.UIT.R,
+                    config = { align = 'cm' },
+                    nodes = {
+                        { n = G.UIT.O, config = { object = DynaText({ string = { ' ' .. localize('ph_mr_bones') .. ' ' }, colours = { G.C.FILTER }, shadow = true, pop_in = 0, scale = 0.5 * scale, silent = true }) } }
+                    }
+                }
+            }
+        }
+        or {
+            n = G.UIT.C,
+            config = { padding = 0.05, align = 'cm' },
+            nodes = {
+                {
+                    n = G.UIT.R,
+                    config = { align = 'cm' },
+                    nodes = {
+                        { n = G.UIT.O, config = { object = DynaText({ string = { ' ' .. localize('ph_score_at_least') .. ' ' }, colours = { G.C.UI.TEXT_LIGHT }, shadow = true, pop_in = 0, scale = 0.4 * scale, silent = true }) } }
+                    }
+                },
+                {
+                    n = G.UIT.R,
+                    config = { align = 'cm', minh = 0.8 },
+                    nodes = {
+                        { n = G.UIT.O, config = { w = 0.5, h = 0.5, object = stake_sprite, hover = true, can_collide = false } },
+                        { n = G.UIT.T, config = { text = G.GAME.blind.chip_text, scale = scale_number(G.GAME.blind.chips, scale, 100000), colour = G.C.RED, shadow = true } }
+                    }
+                }
+            }
+        })
+end
+
+'''
+match_indent = true
+times = 1
+
+# Add custom round eval
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''elseif string.find(config.name, 'tag') then'''
+position = "before"
+payload = '''
+    elseif  BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and config.name == 'default_dollars' then
+        table.insert(left_text, {
+            n = G.UIT.C,
+            config = { padding = 0.05, align = 'cm' },
+            nodes = {
+                {
+                    n = G.UIT.R,
+                    config = { align = 'cm' },
+                    nodes = {
+                        { n = G.UIT.O, config = { object = DynaText({ string = { localize('b_versus_default_dollar_won') }, colours = { G.C.WHITE }, shadow = true, float = false, spacing = 10, rotate = true, scale = 0.4 * scale, pop_in = 0.6, maxw = 6.5 }) } },
+                    }
+                }
+            }
+        })
+    elseif BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and config.name == 'won_round_dollars' then
+        table.insert(left_text, {
+            n = G.UIT.C,
+            config = { padding = 0.05, align = 'cm' },
+            nodes = {
+                {
+                    n = G.UIT.R,
+                    config = { align = 'cm' },
+                    nodes = {
+                        { n = G.UIT.O, config = { object = DynaText({ string = { localize('b_versus_dollar_round_won') }, colours = { G.C.WHITE }, shadow = true, float = false, spacing = 10, rotate = true, scale = 0.6 * scale, pop_in = 0.4, maxw = 6.5 }) } },
+                    }
+                }
+            }
+        })
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''G.hand:hard_set_VT()'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+       if ORIG_HAND_T_Y == -1 then
+           ORIG_HAND_T_Y = G.hand.T.y 
+       end
+
+        G.hand.T.y = ORIG_HAND_T_Y - 3.5
+
+        G.hand.T.x = G.hand.T.x - 5
+        G.deck.T.x = G.deck.T.x - 5
+        G.deck.T.y = G.hand.T.y + 2
+        G.jokers.T.x = G.hand.T.x - 0.1
+        G.jokers.T.y = G.hand.T.y + 5.5
+        G.consumeables.T.x = G.jokers.T.x + 11
+        G.consumeables.T.y = G.jokers.T.y
+        G.play.T.x = 15 + G.hand.T.x + (G.hand.T.w - G.play.T.w) / 2
+        G.play.T.y = G.hand.T.y
+        G.discard.T.x = 25 + G.jokers.T.x + G.jokers.T.w / 2 + 0.3 + 15
+        G.discard.T.y = 4.2
+
+        G.opponent_hand.T.x = G.hand.T.x
+        G.opponent_hand.T.y = G.hand.T.y - 6.2
+        G.opponent_deck.T.x = G.deck.T.x
+        G.opponent_deck.T.y = G.opponent_hand.T.y + 1
+        G.opponent_jokers.T.x = G.opponent_hand.T.x
+        G.opponent_jokers.T.y = G.opponent_hand.T.y - 3.2
+        G.opponent_consumeables.T.x = G.opponent_jokers.T.x + 11
+        G.opponent_consumeables.T.y = G.opponent_jokers.T.y
+        G.opponent_play.T.x = 15 + G.opponent_hand.T.x + (G.opponent_hand.T.w - G.opponent_play.T.w) / 2
+        G.opponent_play.T.y = G.opponent_hand.T.y
+        G.opponent_discard.T.x = 25 + G.opponent_jokers.T.x + G.opponent_jokers.T.w / 2 + 0.3 + 15
+        G.opponent_discard.T.y = 4.2
+
+end
+'''
+match_indent = true
+times = 1
+
+#Add a is_opponent flag for opponent card creation...
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''function create_card(_type, area, legendary, _rarity, skip_materialize, soulable, forced_key, key_append)'''
+position = "at"
+payload = '''
+function create_card(_type, area, legendary, _rarity, skip_materialize, soulable, forced_key, key_append, is_opponent)
+'''
+match_indent = true
+times = 1
+
+#...and use the appropriate pool for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''local _pool, _pool_key = get_current_pool(_type, _rarity, legendary, key_append)
+        center = pseudorandom_element(_pool, pseudoseed(_pool_key))
+        local it = 1
+        while center == 'UNAVAILABLE' do
+            it = it + 1
+            center = pseudorandom_element(_pool, pseudoseed(_pool_key..'_resample'..it))
+        end'''
+position = "at"
+payload = '''
+if is_opponent then
+    local _pool, _pool_key = get_current_pool(_type, _rarity, legendary, key_append,true)
+
+    center = pseudorandom_element(_pool, opponent_pseudoseed(_pool_key))
+    local it = 1
+    while center == 'UNAVAILABLE' do
+        it = it + 1
+        
+        center = pseudorandom_element(_pool, opponent_pseudoseed(_pool_key..'_resample'..it))
+    end
+else
+    local _pool, _pool_key = get_current_pool(_type, _rarity, legendary, key_append)
+
+    center = pseudorandom_element(_pool, pseudoseed(_pool_key))
+    local it = 1
+    while center == 'UNAVAILABLE' do
+        it = it + 1
+        center = pseudorandom_element(_pool, pseudoseed(_pool_key..'_resample'..it))
+    end
+end
+   
+'''
+match_indent = true
+times = 1
+
+#Create_card:Use the appropriate pseudorandom function for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''if (_type == 'Tarot' or _type == 'Spectral' or _type == 'Tarot_Planet') and
+        not (G.GAME.used_jokers['c_soul'] and not next(find_joker("Showman")))  then
+            if pseudorandom('soul_'.._type..G.GAME.round_resets.ante) > 0.997 then
+                forced_key = 'c_soul'
+            end
+        end
+        if (_type == 'Planet' or _type == 'Spectral') and
+        not (G.GAME.used_jokers['c_black_hole'] and not next(find_joker("Showman")))  then 
+            if pseudorandom('soul_'.._type..G.GAME.round_resets.ante) > 0.997 then
+                forced_key = 'c_black_hole'
+            end
+        end'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
+    if (_type == 'Tarot' or _type == 'Spectral' or _type == 'Tarot_Planet') and
+            not (G.GAME.opponent_used_jokers['c_soul'] and not next(opponent_find_joker("Showman"))) then
+            if pseudorandom('soul_' .. _type .. G.GAME.opponent_round_resets.ante,nil,nil,true) > 0.997 then
+                forced_key = 'c_soul'
+            end
+        end
+        if (_type == 'Planet' or _type == 'Spectral') and
+            not (G.GAME.opponent_used_jokers['c_black_hole'] and not next(opponent_find_joker("Showman"))) then
+            if pseudorandom('soul_' .. _type .. G.GAME.opponent_round_resets.ante,nil,nil,true) > 0.997 then
+                forced_key = 'c_black_hole'
+            end
+    end
+else
+    if (_type == 'Tarot' or _type == 'Spectral' or _type == 'Tarot_Planet') and
+            not (G.GAME.used_jokers['c_soul'] and not next(find_joker("Showman"))) then
+            if pseudorandom('soul_' .. _type .. G.GAME.round_resets.ante) > 0.997 then
+                forced_key = 'c_soul'
+            end
+        end
+        if (_type == 'Planet' or _type == 'Spectral') and
+            not (G.GAME.used_jokers['c_black_hole'] and not next(find_joker("Showman"))) then
+            if pseudorandom('soul_' .. _type .. G.GAME.round_resets.ante) > 0.997 then
+                forced_key = 'c_black_hole'
+            end
+    end
+end
+'''
+match_indent = true
+times = 1
+
+#get_current_pool: Use the appropriate pseudorandom function for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''local rarity = _rarity or pseudorandom('rarity'..G.GAME.round_resets.ante..(_append or ''))'''
+position = "at"
+payload = '''
+local rarity = nil
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
+    rarity = _rarity or pseudorandom(opponent_pseudoseed('rarity' .. G.GAME.opponent_round_resets.ante .. (_append or '')))
+else
+    rarity = _rarity or pseudorandom('rarity' .. G.GAME.round_resets.ante .. (_append or ''))
+end
+'''
+match_indent = true
+times = 1
+
+#Use the appropriate poll_edition for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''local edition = poll_edition('edi'..(key_append or '')..G.GAME.round_resets.ante)'''
+position = "at"
+payload = '''
+local edition = nil
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
+    edition = poll_edition('edi' ..(key_append or '')..G.GAME.opponent_round_resets.ante,nil,nil,nil,true)
+else
+    edition = poll_edition('edi'..(key_append or '')..G.GAME.round_resets.ante)
+end
+'''
+match_indent = true
+times = 1
+
+
+#poll_edition: Add a is_opponent flag for opponent card creation...
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''function poll_edition(_key, _mod, _no_neg, _guaranteed)'''
+position = "at"
+payload = '''
+function poll_edition(_key, _mod, _no_neg, _guaranteed, is_opponent)
+'''
+match_indent = true
+times = 1
+
+#poll_edition: ...and use the appropriate pseudorandom function for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''local edition_poll = pseudorandom(pseudoseed(_key or 'edition_generic'))'''
+position = "at"
+payload = '''
+local edition_poll = nil
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
+    edition_poll = pseudorandom(opponent_pseudoseed(_key or 'edition_generic'))
+else
+    edition_poll = pseudorandom(pseudoseed(_key or 'edition_generic'))
+end
+'''
+match_indent = true
+times = 1
+
+#poll_edition: Also use the appropriate edition_rate (modified by the voucher) for opponent card
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''if edition_poll > 1 - 0.003*_mod and not _no_neg then
+            return {negative = true}
+        elseif edition_poll > 1 - 0.006*G.GAME.edition_rate*_mod then
+            return {polychrome = true}
+        elseif edition_poll > 1 - 0.02*G.GAME.edition_rate*_mod then
+            return {holo = true}
+        elseif edition_poll > 1 - 0.04*G.GAME.edition_rate*_mod then
+            return {foil = true}
+        end'''
+position = "at"
+payload = '''
+local edition_type
+local edition_rate = is_opponent and G.GAME.opponent_edition_rate or G.GAME.edition_rate
+
+if edition_poll > 1 - 0.003 * _mod and not _no_neg then
+    edition_type = { negative = true }
+elseif edition_poll > 1 - 0.006 * edition_rate * _mod then
+    edition_type = { polychrome = true }
+elseif edition_poll > 1 - 0.02 * edition_rate * _mod then
+    edition_type = { holo = true }
+elseif edition_poll > 1 - 0.04 * edition_rate * _mod then
+    edition_type = { foil = true }
+end
+
+return edition_type
+'''
+match_indent = true
+times = 1
+
+#Use the appropriate pseudorandom function for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = ''' local front = ((_type=='Base' or _type == 'Enhanced') and pseudorandom_element(G.P_CARDS, pseudoseed('front'..(key_append or '')..G.GAME.round_resets.ante))) or nil'''
+position = "at"
+payload = '''
+local front = nil
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
+    front = ((_type == 'Base' or _type == 'Enhanced') and pseudorandom_element(G.P_CARDS, opponent_pseudoseed('front' .. (key_append or '') .. G.GAME.opponent_round_resets.ante),nil)) or nil
+else
+    front = ((_type=='Base' or _type == 'Enhanced') and pseudorandom_element(G.P_CARDS, pseudoseed('front'..(key_append or '')..G.GAME.round_resets.ante))) or nil
+end
+'''
+match_indent = true
+times = 1
+
+#create_card: Also add a is_opponent parameter to the card creation
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''bypass_back = G.GAME.selected_back.pos})'''
+position = "at"
+payload = '''
+bypass_back = G.GAME.selected_back.pos,
+is_opponent = is_opponent
+})
+'''
+match_indent = true
+times = 1
+
+#get_current_pool: Update to add a flag for opponent...
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''function get_current_pool(_type, _rarity, _legendary, _append)'''
+position = "at"
+payload = '''
+function get_current_pool(_type, _rarity, _legendary, _append, is_opponent)
+'''
+match_indent = true
+times = 1
+
+#get_current_pool: ...and use the appropriate playing_cards for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''for kk, vv in pairs(G.playing_cards) do
+                    if vv.config.center.key == v.enhancement_gate then
+                        add = true
+                    end
+                end'''
+position = "at"
+payload = '''
+if is_opponent then
+    for kk, vv in pairs(G.opponent_playing_cards) do
+                    if vv.config.center.key == v.enhancement_gate then
+                        add = true
+                    end
+                end
+else
+    for kk, vv in pairs(G.playing_cards) do
+                    if vv.config.center.key == v.enhancement_gate then
+                        add = true
+                    end
+                end
+end
+'''
+match_indent = true
+times = 1
+
+#get_current_pool: use the appropriate function for opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''elseif not (G.GAME.used_jokers[v.key] and not next(find_joker("Showman"))) and'''
+position = "at"
+payload = '''
+elseif is_opponent and not (G.GAME.opponent_used_jokers[v.key] and not next(opponent_find_joker("Showman"))) and
+            (v.unlocked ~= false or v.rarity == 4) then
+            if v.set == 'Voucher' then
+                if not G.GAME.opponent_used_vouchers[v.key] then
+                    local include = true
+                    if v.requires then
+                        for kk, vv in pairs(v.requires) do
+                            if not G.GAME.opponent_used_vouchers[vv] then
+                                include = false
+                            end
+                        end
+                    end
+                    if G.shop_vouchers and G.shop_vouchers.cards then
+                        for kk, vv in ipairs(G.shop_vouchers.cards) do
+                            if vv.config.center.key == v.key then include = false end
+                        end
+                    end
+                    if include then
+                        add = true
+                    end
+                end
+            elseif v.set == 'Planet' then
+                if (not v.config.softlock or G.GAME.opponent_hands[v.config.hand_type].played > 0) then
+                    add = true
+                end
+            elseif v.enhancement_gate then
+                add = nil
+                for kk, vv in pairs(G.opponent_playing_cards) do
+                    if vv.config.center.key == v.enhancement_gate then
+                        add = true
+                    end
+                end
+            else
+                add = true
+            end
+            if v.name == 'Black Hole' or v.name == 'The Soul' then
+                add = false
+            end
+elseif not is_opponent and not (G.GAME.used_jokers[v.key] and not next(find_joker("Showman"))) and    
+'''
+match_indent = true
+times = 1
+
+
+#There is no ante in versus mode, prevent it
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''function ease_ante(mod)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    return
+end
+'''
+match_indent = true
+times = 1
+
+#generate_card_ui: Add a flag for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end)'''
+position = "at"
+payload = '''
+function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, is_opponent)
+'''
+match_indent = true
+times = 1
+
+#generate_card_ui: Use the right probabilities for the opponent
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''elseif _c.name == "The Wheel of Fortune" then loc_vars = {G.GAME.probabilities.normal, _c.config.extra};  info_queue[#info_queue+1] = G.P_CENTERS.e_foil; info_queue[#info_queue+1] = G.P_CENTERS.e_holo; info_queue[#info_queue+1] = G.P_CENTERS.e_polychrome;'''
+position = "before"
+payload = '''
+elseif _c.name == "The Wheel of Fortune" and is_opponent then loc_vars = {G.GAME.opponent_probabilities.normal, _c.config.extra};  info_queue[#info_queue+1] = G.P_CENTERS.e_foil; info_queue[#info_queue+1] = G.P_CENTERS.e_holo; info_queue[#info_queue+1] = G.P_CENTERS.e_polychrome; 
+'''
+match_indent = true
+times = 1
+
+
+#generate_card_ui: add the flag
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''generate_card_ui(v, full_UI_table)'''
+position = "at"
+payload = '''
+generate_card_ui(v, full_UI_table, nil, nil, nil, nil, nil, nil, is_opponent)
+'''
+match_indent = true
+times = 1
+
+#get_pack: update get_pack to use a pseudoseeded random to ensure the same pack is generated for both players
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''return G.P_CENTERS['p_buffoon_normal_'..(math.random(1, 2))]'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    local choices = {1, 2}
+    return G.P_CENTERS['p_buffoon_normal_' .. pseudorandom_element(choices, opponent_pseudoseed('first_shop_buffoon'))]
+else
+    return G.P_CENTERS['p_buffoon_normal_'..(math.random(1, 2))]
+end
+'''
+match_indent = true
+times = 1

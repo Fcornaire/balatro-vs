@@ -1,0 +1,239 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''--Set sliding up/down for the hand area
+    if self == G.hand then 
+        local desired_y = G.TILE_H - G.hand.T.h - 1.9*((not G.deck_preview and (G.STATE == G.STATES.SELECTING_HAND or G.STATE == G.STATES.DRAW_TO_HAND)) and 1 or 0)
+        G.hand.T.y = 15*G.real_dt*desired_y + (1-15*G.real_dt)*G.hand.T.y
+        if math.abs(desired_y - G.hand.T.y) < 0.01 then G.hand.T.y = desired_y end
+        if G.STATE == G.STATES.TUTORIAL then 
+            G.play.T.y = G.hand.T.y - (3 + 0.6)
+        end
+    end'''
+position = "at"
+payload = '''
+    --Ignore sliding up/down for the hand area
+'''
+match_indent = true
+times = 1
+
+#Also shuffle opponent deck when shuffling player deck
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''pseudoshuffle(self.cards, pseudoseed(_seed or 'shuffle'))'''
+position = "at"
+payload = '''
+    if self == G.opponent_deck then 
+        print('shuffling opponent deck')
+        pseudoshuffle(self.cards, opponent_pseudoseed(_seed or 'shuffle'))
+    else
+        pseudoshuffle(self.cards, pseudoseed(_seed or 'shuffle'))
+    end
+'''
+match_indent = true
+times = 1
+
+# Make opponent hand and consumeable cards face down
+# Tell opponent when a new card is added
+# Also flip card when added to opponent hand
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''function CardArea:emplace(card, location, stay_flipped)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if self == G.opponent_hand then 
+        stay_flipped = true
+    end
+
+    if self == G.opponent_consumeables then 
+        card:flip()
+    end
+end
+'''
+match_indent = true
+times = 1
+
+#Prevent card action on opponent area
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''card.states.drag.can = true
+        end
+    end
+end'''
+position = "at"
+payload = '''
+            card.states.drag.can = true
+        end
+        if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+            if self == G.opponent_hand or self == G.opponent_consumeables or self == G.opponent_jokers then
+                -- Prevent card action on netplay
+                card.states.drag.can = false 
+                card.states.click.can = false
+            end
+
+            if self == G.consumeables then
+                -- Prevent consumeable card drag action on netplay
+                card.states.drag.can = false 
+            end
+        end
+    end
+end
+'''
+match_indent = true
+times = 1
+
+
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''Moveable.move(self, dt)
+    self:align_cards()'''
+position = "at"
+payload = '''
+    Moveable.move(self, dt)
+    self:align_cards()
+
+    -- This looks complex but all it does is
+    -- sending the new card alignment to the opponent
+    -- when the player drag a card
+    -- (since the alignement is important in scoring)
+
+    local dragged_card = -1
+    for i, card in ipairs(self.cards) do
+        if card.states.drag.is then
+            dragged_card = i
+            break
+        end
+    end
+   
+
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if self == G.hand then
+        update_hand_cards_alignment(self.cards, dragged_card)
+    elseif self == G.jokers then
+        update_jokers_alignment(self.cards, dragged_card)
+    elseif self == G.consumeables then
+        update_consumeables_alignment(self.cards, dragged_card)
+    end
+end
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''card.states.drag.can = true
+        end'''
+position = "after"
+payload = '''
+    if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and self.locked then
+        card.states.drag.can = false
+    end
+'''
+match_indent = true
+times = 1
+
+# Because of the downward patch adding a = false end again, the upward patch is needed before !!!
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''CardArea = Moveable:extend()'''
+position = "after"
+payload = '''
+
+    function CardArea:opponent_change_size(delta)
+        if delta ~= 0 then 
+            G.E_MANAGER:add_event(Event({
+                func = function() 
+                    self.config.real_card_limit = (self.config.real_card_limit or self.config.card_limit) + delta
+                    self.config.card_limit = math.max(0, self.config.real_card_limit)
+                    if delta > 0 and self.config.real_card_limit > 1 and self == G.opponent_hand and self.cards[1] and (G.STATE == G.STATES.DRAW_TO_HAND or G.STATE == G.STATES.SELECTING_HAND) then 
+                        local card_count = math.abs(delta)
+                        for i=1, card_count do
+                            draw_card(G.opponent_deck,G.opponent_hand, i*100/card_count,nil, nil , nil, 0.07)
+                            G.E_MANAGER:add_event(Event({func = function() self:sort() return true end}))
+                        end
+                    end
+            return true
+            end}))
+        end
+    end
+
+    -- Custom helper functions on a CardArea
+
+    function CardArea:get_highlighted_cards_index()
+        local highlighted = {}
+        for i, card in ipairs(G.hand.cards) do
+            if card ~= nil then
+                if card.highlighted then
+                    table.insert(highlighted, i)
+                end
+            end
+        end
+        return highlighted
+    end
+
+    function CardArea:lock()
+        self.locked = true
+        for i, card in ipairs(self.cards) do
+            card.states.drag.can = false
+            card.states.click.can = false
+        end
+    end
+
+    function CardArea:unlock()
+        if self.hard_locked then return end
+        self.locked = false
+        for i, card in ipairs(self.cards) do
+            card.states.drag.can = true
+            card.states.click.can = true
+        end
+    end
+
+    function CardArea:hard_lock()
+        self:lock()
+        self.hard_locked = true
+    end
+
+    function CardArea:hard_unlock()
+        self.hard_locked = false
+        self:unlock()
+    end
+
+    
+'''
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''Moveable.init(self, X, Y, W, H)'''
+position = "after"
+payload = '''
+    self.locked = false
+    self.hard_locked = false
+'''
+match_indent = true
+times = 1
+
+#Do not forget about opponent hand and deck
+[[patches]]
+[patches.pattern]
+target = "cardarea.lua"
+pattern = '''if #self.cards < self.config.card_limit or self == G.deck or self == G.hand then'''
+position = "at"
+payload = '''
+if #self.cards < self.config.card_limit or self == G.deck or self == G.hand or self == G.opponent_hand or self == G.opponent_deck then
+'''
+match_indent = true
+times = 1

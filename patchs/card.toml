@@ -1,0 +1,3426 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+#TODO: Some Card init has an extra "is_opponent" parameter, use it instead of checking area etc
+
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''if (self.area == G.hand) and (G.STATE == G.STATES.HAND_PLAYED) then return end'''
+position = "after"
+payload = '''
+    if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+        if (self.area == G.opponent_hand) and (G.STATE == G.STATES.HAND_PLAYED) then return end
+    end
+'''
+match_indent = true
+times = 1
+
+#Some helper functions
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''Card = Moveable:extend()'''
+position = "after"
+payload = '''
+    function Card:get_index_from_area()
+        local index = -1
+        for i, card in ipairs(self.area.cards) do
+            if card == self then
+                index = i
+                break
+            end
+        end
+        return index
+    end
+
+    function Card:is_in_area(area)
+        return self.area == area
+    end
+
+    function Card:to_card_conf(type)
+        local card_conf = {}
+        card_conf.center = self.config.center and lume.serialize(self.config.center) or ''
+        card_conf.card = self.config.card and lume.serialize(self.config.card) or ''
+        card_conf.ability = self.ability and lume.serialize(self.ability) or ''
+        card_conf.center_key = self.config.center_key
+        card_conf.label = self.ability.name
+        card_conf.location = ''
+        card_conf.stay_flipped = false
+        card_conf.edition = self.edition and lume.serialize(self.edition) or ''
+        card_conf.type_ = type
+        card_conf.versus_center_id = self.balatro_vs_center_id
+        return card_conf
+    end
+'''
+match_indent = true
+times = 1
+
+#Some opponent specific functions
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''Card = Moveable:extend()'''
+position = "after"
+payload = '''
+
+function Card:opponent_get_chip_mult()
+    if self.debuff then return 0 end
+    if self.ability.set == 'Joker' then return 0 end
+    if self.ability.effect == "Lucky Card" then 
+        if pseudorandom('lucky_mult',nil,nil,true) < G.GAME.opponent_probabilities.normal/5 then
+            self.lucky_trigger = true
+            return self.ability.mult
+        else
+            return 0
+        end
+    else  
+        return self.ability.mult
+    end
+end
+
+--For some reason, using self.eligible_strength_jokers can be nil for some reason ,so we get it manually ¯\_(ツ)_/¯
+function Card:get_eligible_strength()
+    local eligible_strength_jokers = {}
+    for k, v in pairs(G.opponent_jokers.cards) do
+                if v.ability.set == 'Joker' and (not v.edition) then
+                    table.insert(eligible_strength_jokers, v)
+                end
+            end
+    return eligible_strength_jokers
+end
+
+function Card:opponent_open()
+    if self.ability.set == "Booster" then
+        stop_use()
+        G.STATE_COMPLETE = false 
+        self.opening = true
+
+        if not self.config.center.discovered then
+            discover_card(self.config.center)
+        end
+        self.states.hover.can = false
+
+        if self.ability.name:find('Arcana') then 
+            G.STATE = G.STATES.TAROT_PACK
+            G.GAME.pack_size = self.ability.extra
+        elseif self.ability.name:find('Celestial') then
+            G.STATE = G.STATES.PLANET_PACK
+            G.GAME.pack_size = self.ability.extra
+        elseif self.ability.name:find('Spectral') then
+            G.STATE = G.STATES.SPECTRAL_PACK
+            G.GAME.pack_size = self.ability.extra
+        elseif self.ability.name:find('Standard') then
+            G.STATE = G.STATES.STANDARD_PACK
+            G.GAME.pack_size = self.ability.extra
+        elseif self.ability.name:find('Buffoon') then
+            G.STATE = G.STATES.BUFFOON_PACK
+            G.GAME.pack_size = self.ability.extra
+        end
+
+        G.GAME.pack_choices = self.config.center.config.choose or 1
+
+        if self.cost > 0 then 
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.2, func = function()
+                inc_career_stat('c_shop_dollars_spent', self.cost)
+                self:juice_up()
+            return true end }))
+            opponent_ease_dollars(-self.cost) 
+       else
+           delay(0.2)
+       end
+
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            self:explode()
+            local pack_cards = {}
+
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 1.3*math.sqrt(G.SETTINGS.GAMESPEED), blockable = false, blocking = false, func = function()
+                local _size = self.ability.extra
+                
+                for i = 1, _size do
+                    local card = nil
+                    if self.ability.name:find('Arcana') then 
+                        if G.GAME.opponent_used_vouchers.v_omen_globe and pseudorandom(opponent_pseudoseed('omen_globe')) > 0.8 then
+                            card = create_card("Spectral", G.pack_cards, nil, nil, true, true, nil, 'ar2',true)
+                        else
+                            card = create_card("Tarot", G.pack_cards, nil, nil, true, true, nil, 'ar1',true)
+                        end
+                    elseif self.ability.name:find('Celestial') then
+                        if G.GAME.opponent_used_vouchers.v_telescope and i == 1 then
+                            local _planet, _hand, _tally = nil, nil, 0
+                            for k, v in ipairs(G.handlist) do
+                                if G.GAME.opponent_hands[v].visible and G.GAME.opponent_hands[v].played > _tally then
+                                    _hand = v
+                                    _tally = G.GAME.opponent_hands[v].played
+                                end
+                            end
+                            if _hand then
+                                for k, v in pairs(G.P_CENTER_POOLS.Planet) do
+                                    if v.config.hand_type == _hand then
+                                        _planet = v.key
+                                    end
+                                end
+                            end
+                            card = create_card("Planet", G.pack_cards, nil, nil, true, true, _planet, 'pl1',true)
+                        else
+                            card = create_card("Planet", G.pack_cards, nil, nil, true, true, nil, 'pl1',true)
+                        end
+                    elseif self.ability.name:find('Spectral') then
+                        card = create_card("Spectral", G.pack_cards, nil, nil, true, true, nil, 'spe',true)
+                    elseif self.ability.name:find('Standard') then
+                        card = create_card((pseudorandom(opponent_pseudoseed('stdset'..G.GAME.opponent_round_resets.ante)) > 0.6) and "Enhanced" or "Base", G.pack_cards, nil, nil, nil, true, nil, 'sta',true)
+                        local edition_rate = 2
+                        local edition = poll_edition('standard_edition'..G.GAME.opponent_round_resets.ante, edition_rate, true,nil,true)
+                        card:set_edition(edition)
+                        local seal_rate = 10
+                        local seal_poll = pseudorandom(opponent_pseudoseed('stdseal'..G.GAME.opponent_round_resets.ante))
+                        if seal_poll > 1 - 0.02*seal_rate then
+                            local seal_type = pseudorandom(opponent_pseudoseed('stdsealtype'..G.GAME.opponent_round_resets.ante))
+                            if seal_type > 0.75 then card:set_seal('Red')
+                            elseif seal_type > 0.5 then card:set_seal('Blue')
+                            elseif seal_type > 0.25 then card:set_seal('Gold')
+                            else card:set_seal('Purple')
+                            end
+                        end
+                    elseif self.ability.name:find('Buffoon') then
+                        card = create_card("Joker", G.pack_cards, nil, nil, true, true, nil, 'buf',true)
+
+                    end
+                    card.T.x = self.T.x
+                    card.T.y = self.T.y
+                    card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 1.5*G.SETTINGS.GAMESPEED)
+                    pack_cards[i] = card
+                end
+                return true
+            end}))
+
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 1.3*math.sqrt(G.SETTINGS.GAMESPEED), blockable = false, blocking = false, func = function()
+                if G.pack_cards then 
+                    if G.pack_cards and G.pack_cards.VT.y < G.ROOM.T.h then 
+                    for k, v in ipairs(pack_cards) do
+                        G.pack_cards:emplace(v)
+                    end
+
+                    if G.STATE ~= G.STATES.TAROT_PACK and G.STATE ~= G.STATES.SPECTRAL_PACK then
+                        G.E_MANAGER:add_event(Event({
+                            trigger = 'after',
+                            delay = 1.5,
+                            func = function()
+                                G.FUNCS.game_manipulation_acknowledge_event() -- Acknowledge opponent booster opening for non drawn boosters cards
+                                return true
+                            end
+                        }))
+                    end
+
+                    return true
+                    end
+                end
+            end}))
+
+            for i = 1, #G.opponent_jokers.cards do
+                G.opponent_jokers.cards[i]:opponent_calculate_joker({open_booster = true, card = self})
+            end
+
+            if G.GAME.modifiers.inflation then 
+                G.GAME.inflation = G.GAME.inflation + 1
+                G.E_MANAGER:add_event(Event({func = function()
+                  for k, v in pairs(G.I.CARD) do
+                      if v.set_cost then v:set_cost() end
+                  end
+                  return true end }))
+            end
+
+        return true end }))
+    end
+end
+
+function Card:opponent_calculate_joker(context)
+    BALATRO_VS_CTX.interaction_context:handle_interaction(context,{})
+    if self.debuff then return nil end
+    if self.ability.set == "Planet" and not self.debuff then
+        if context.joker_main then
+            if G.GAME.opponent_used_vouchers.v_observatory and self.ability.consumeable.hand_type == context.scoring_name then
+                return {
+                    message = localize{type = 'variable', key = 'a_xmult', vars = {G.P_CENTERS.v_observatory.config.extra}},
+                    Xmult_mod = G.P_CENTERS.v_observatory.config.extra
+                }
+            end
+        end
+    end
+    if self.ability.set == "Joker" and not self.debuff then
+        if self.ability.name == "Blueprint" then
+            local other_joker = nil
+            for i = 1, #G.opponent_jokers.cards do
+                if G.opponent_jokers.cards[i] == self then other_joker = G.opponent_jokers.cards[i+1] end
+            end
+            if other_joker and other_joker ~= self then
+                context.blueprint = (context.blueprint and (context.blueprint + 1)) or 1
+                context.blueprint_card = context.blueprint_card or self
+                if context.blueprint > #G.opponent_jokers.cards + 1 then return end
+                local other_joker_ret = other_joker:opponent_calculate_joker(context)
+                if other_joker_ret then 
+                    other_joker_ret.card = context.blueprint_card or self
+                    other_joker_ret.colour = G.C.BLUE
+                    return other_joker_ret
+                end
+            end
+        end
+        if self.ability.name == "Brainstorm" then
+            local other_joker = G.opponent_jokers.cards[1]
+            if other_joker and other_joker ~= self then
+                context.blueprint = (context.blueprint and (context.blueprint + 1)) or 1
+                context.blueprint_card = context.blueprint_card or self
+                if context.blueprint > #G.opponent_jokers.cards + 1 then return end
+                local other_joker_ret = other_joker:opponent_calculate_joker(context)
+                if other_joker_ret then 
+                    other_joker_ret.card = context.blueprint_card or self
+                    other_joker_ret.colour = G.C.RED
+                    return other_joker_ret
+                end
+            end
+        end
+        if context.open_booster then
+            if self.ability.name == 'Hallucination' and #G.opponent_consumeables.cards + G.GAME.consumeable_buffer < G.opponent_consumeables.config.card_limit then
+                if pseudorandom('halu'..G.GAME.opponent_round_resets.ante,nil,nil,true) < G.GAME.opponent_probabilities.normal/self.ability.extra then
+                    G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
+                    G.E_MANAGER:add_event(Event({
+                        trigger = 'before',
+                        delay = 0.0,
+                        func = (function()
+                                local card = create_card('Tarot',G.opponent_consumeables, nil, nil, nil, nil, nil, 'hal',true)
+                                card:opponent_add_to_deck()
+                                G.opponent_consumeables:emplace(card)
+                                G.GAME.consumeable_buffer = 0
+                            return true
+                        end)}))
+                    opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize('k_plus_tarot'), colour = G.C.PURPLE})
+                end
+            end
+        elseif context.buying_card then
+            
+        elseif context.selling_self then
+            if self.ability.name == 'Luchador' then
+                if G.GAME.blind and ((not G.GAME.blind.disabled) and (G.GAME.blind:get_type() == 'Boss')) then 
+                    opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('ph_boss_disabled')})
+                    G.GAME.blind:disable()
+                end
+            end
+            if self.ability.name == 'Diet Cola' then
+                G.E_MANAGER:add_event(Event({
+                    func = (function()
+                        add_tag(Tag('tag_double'))
+                        play_sound('generic1', 0.9 + math.random()*0.1, 0.8)
+                        play_sound('holo1', 1.2 + math.random()*0.1, 0.4)
+                        return true
+                    end)
+                }))
+            end
+            if self.ability.name == 'Invisible Joker' and (self.ability.invis_rounds >= self.ability.extra) and not context.blueprint then
+                local eval = function(card) return (card.ability.loyalty_remaining == 0) and not G.RESET_JIGGLES end
+                                    juice_card_until(self, eval, true)
+                local jokers = {}
+                for i=1, #G.opponent_jokers.cards do 
+                    if G.opponent_jokers.cards[i] ~= self then
+                        jokers[#jokers+1] = G.opponent_jokers.cards[i]
+                    end
+                end
+                if #jokers > 0 then 
+                    if #G.opponent_jokers.cards <= G.opponent_jokers.config.card_limit then 
+                        opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_duplicated_ex')})
+                        local chosen_joker = pseudorandom_element(jokers, opponent_pseudoseed('invisible'))
+                        local card = copy_card(chosen_joker, nil, nil, nil, chosen_joker.edition and chosen_joker.edition.negative)
+                        if card.ability.invis_rounds then card.ability.invis_rounds = 0 end
+                        card:opponent_add_to_deck()
+                        G.opponent_jokers:emplace(card)
+                    else
+                        opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_no_room_ex')})
+                    end
+                else
+                    opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_no_other_jokers')})
+                end
+            end
+        elseif context.selling_card then
+                if self.ability.name == 'Campfire' and not context.blueprint then
+                    self.ability.x_mult = self.ability.x_mult + self.ability.extra
+                    G.E_MANAGER:add_event(Event({
+                        func = function() opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize('k_upgrade_ex')}); return true
+                        end}))
+                end
+            return
+        elseif context.reroll_shop then
+            if self.ability.name == 'Flash Card' and not context.blueprint then
+                self.ability.mult = self.ability.mult + self.ability.extra
+                G.E_MANAGER:add_event(Event({
+                    func = (function()
+                        opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_mult', vars = {self.ability.mult}}, colour = G.C.MULT})
+                    return true
+                end)}))
+            end
+        elseif context.ending_shop then
+            if self.ability.name == 'Perkeo' then
+                if G.opponent_consumeables.cards[1] then
+                    G.E_MANAGER:add_event(Event({
+                        func = function() 
+                            local card = copy_card(pseudorandom_element(G.opponent_consumeables.cards, opponent_pseudoseed('perkeo')), nil)
+                            card:set_edition({negative = true}, true)
+                            card:opponent_add_to_deck()
+                            G.opponent_consumeables:emplace(card) 
+                            return true
+                        end}))
+                    opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_duplicated_ex')})
+                end
+                return
+            end
+            return
+        elseif context.skip_blind then
+            if self.ability.name == 'Throwback' and not context.blueprint then
+                G.E_MANAGER:add_event(Event({
+                    func = function() 
+                        opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {
+                            message = localize{type = 'variable', key = 'a_xmult', vars = {self.ability.x_mult}},
+                                colour = G.C.RED,
+                            card = self
+                        }) 
+                        return true
+                    end}))
+            end
+            return
+        elseif context.skipping_booster then
+            if self.ability.name == 'Red Card' and not context.blueprint then
+                self.ability.mult = self.ability.mult + self.ability.extra
+                                G.E_MANAGER:add_event(Event({
+                    func = function() 
+                        opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {
+                            message = localize{type = 'variable', key = 'a_mult', vars = {self.ability.extra}},
+                            colour = G.C.RED,
+                            delay = 0.45, 
+                            card = self
+                        }) 
+                        return true
+                    end}))
+            end
+            return
+        elseif context.playing_card_added and not self.getting_sliced then
+            if self.ability.name == 'Hologram' and (not context.blueprint)
+                and context.cards and context.cards[1] then
+                    self.ability.x_mult = self.ability.x_mult + #context.cards*self.ability.extra
+                    opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_xmult', vars = {self.ability.x_mult}}})
+            end
+        elseif context.first_hand_drawn then
+            if self.ability.name == 'Certificate' then
+                G.E_MANAGER:add_event(Event({
+                    func = function() 
+                        local _card = opponent_create_playing_card({
+                            front = pseudorandom_element(G.P_CARDS, opponent_pseudoseed('cert_fr')), 
+                            center = G.P_CENTERS.c_base}, G.opponent_hand, nil, nil, {G.C.SECONDARY_SET.Enhanced})
+                        local seal_type = pseudorandom(opponent_pseudoseed('certsl'))
+                        if seal_type > 0.75 then _card:set_seal('Red', true)
+                        elseif seal_type > 0.5 then _card:set_seal('Blue', true)
+                        elseif seal_type > 0.25 then _card:set_seal('Gold', true)
+                        else _card:set_seal('Purple', true)
+                        end
+                        G.opponent_hand:sort()
+                        if context.blueprint_card then context.blueprint_card:juice_up() else self:juice_up() end
+                        return true
+                    end}))
+
+                opponent_playing_card_joker_effects({true})
+            end
+            if self.ability.name == 'DNA' and not context.blueprint then
+                local eval = function() return G.GAME.opponent_current_round.hands_played == 0 end
+                juice_card_until(self, eval, true)
+            end
+            if self.ability.name == 'Trading Card' and not context.blueprint then
+                local eval = function() return G.GAME.opponent_current_round.discards_used == 0 and not G.RESET_JIGGLES end
+                juice_card_until(self, eval, true)
+            end
+        elseif context.setting_blind and not self.getting_sliced then
+            if self.ability.name == 'Chicot' and not context.blueprint
+            and context.blind.boss and not self.getting_sliced then
+                G.E_MANAGER:add_event(Event({func = function()
+                    G.E_MANAGER:add_event(Event({func = function()
+                        G.GAME.blind:disable()
+                        play_sound('timpani')
+                        delay(0.4)
+                        return true end }))
+                    opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize('ph_boss_disabled')})
+                return true end }))
+            end
+            if self.ability.name == 'Madness' and not context.blueprint and not context.blind.boss then
+                self.ability.x_mult = self.ability.x_mult + self.ability.extra
+                local destructable_jokers = {}
+                for i = 1, #G.opponent_jokers.cards do
+                    if G.opponent_jokers.cards[i] ~= self and not G.opponent_jokers.cards[i].ability.eternal and not G.opponent_jokers.cards[i].getting_sliced then destructable_jokers[#destructable_jokers+1] = G.opponent_jokers.cards[i] end
+                end
+                local joker_to_destroy = #destructable_jokers > 0 and pseudorandom_element(destructable_jokers, opponent_pseudoseed('madness')) or nil
+
+                if joker_to_destroy and not (context.blueprint_card or self).getting_sliced then 
+                    joker_to_destroy.getting_sliced = true
+                    G.E_MANAGER:add_event(Event({func = function()
+                        (context.blueprint_card or self):juice_up(0.8, 0.8)
+                        joker_to_destroy:start_dissolve({G.C.RED}, nil, 1.6)
+                    return true end }))
+                end
+                if not (context.blueprint_card or self).getting_sliced then
+                    opponent_card_eval_status_text((context.blueprint_card or self), 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_xmult', vars = {self.ability.x_mult}}})
+                end
+            end
+            if self.ability.name == 'Burglar' and not (context.blueprint_card or self).getting_sliced then
+                G.E_MANAGER:add_event(Event({func = function()
+                    opponent_ease_discard(-G.GAME.opponent_current_round.discards_left, nil, true)
+                    opponent_ease_hands_played(self.ability.extra)
+                    opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_hands', vars = {self.ability.extra}}})
+                return true end }))
+            end
+            if self.ability.name == 'Riff-raff' and not (context.blueprint_card or self).getting_sliced and #G.opponent_jokers.cards + G.GAME.opponent_joker_buffer < G.opponent_jokers.config.card_limit then
+                local jokers_to_create = math.min(2, G.opponent_jokers.config.card_limit - (#G.opponent_jokers.cards + G.GAME.opponent_joker_buffer))
+                G.GAME.opponent_joker_buffer = G.GAME.opponent_joker_buffer + jokers_to_create
+                G.E_MANAGER:add_event(Event({
+                    func = function() 
+                        for i = 1, jokers_to_create do
+                            local card = create_card('Joker', G.opponent_jokers, nil, 0, nil, nil, nil, 'rif',true)
+                            card:opponent_add_to_deck()
+                            G.opponent_jokers:emplace(card)
+                            card:start_materialize()
+                            G.GAME.opponent_joker_buffer = 0
+                        end
+                        return true
+                    end}))   
+                    opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_plus_joker'), colour = G.C.BLUE}) 
+            end
+            if self.ability.name == 'Cartomancer' and not (context.blueprint_card or self).getting_sliced and #G.opponent_consumeables.cards + G.GAME.consumeable_buffer < G.opponent_consumeables.config.card_limit then
+                G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
+                G.E_MANAGER:add_event(Event({
+                    func = (function()
+                        G.E_MANAGER:add_event(Event({
+                            func = function() 
+                                local card = create_card('Tarot',G.opponent_consumeables, nil, nil, nil, nil, nil, 'car',true)
+                                card:opponent_add_to_deck()
+                                G.opponent_consumeables:emplace(card)
+                                G.GAME.consumeable_buffer = 0
+                                return true
+                            end}))   
+                            opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_plus_tarot'), colour = G.C.PURPLE})                       
+                        return true
+                    end)}))
+            end
+            if self.ability.name == 'Ceremonial Dagger' and not context.blueprint then
+                local my_pos = nil
+                for i = 1, #G.opponent_jokers.cards do
+                    if G.opponent_jokers.cards[i] == self then my_pos = i; break end
+                end
+                if my_pos and G.opponent_jokers.cards[my_pos+1] and not self.getting_sliced and not G.opponent_jokers.cards[my_pos+1].ability.eternal and not G.opponent_jokers.cards[my_pos+1].getting_sliced then 
+                    local sliced_card = G.opponent_jokers.cards[my_pos+1]
+                    sliced_card.getting_sliced = true
+                    G.GAME.opponent_joker_buffer = G.GAME.opponent_joker_buffer - 1
+                    G.E_MANAGER:add_event(Event({func = function()
+                        G.GAME.opponent_joker_buffer = 0
+                        self.ability.mult = self.ability.mult + sliced_card.sell_cost*2
+                        self:juice_up(0.8, 0.8)
+                        sliced_card:start_dissolve({HEX("57ecab")}, nil, 1.6)
+                        play_sound('slice1', 0.96+math.random()*0.08)
+                    return true end }))
+                    opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_mult', vars = {self.ability.mult+2*sliced_card.sell_cost}}, colour = G.C.RED, no_juice = true})
+                end
+            end
+            if self.ability.name == 'Marble Joker' and not (context.blueprint_card or self).getting_sliced  then
+                G.E_MANAGER:add_event(Event({
+                    func = function() 
+                        local front = pseudorandom_element(G.P_CARDS, opponent_pseudoseed('marb_fr'))
+                        --G.playing_card = (G.playing_card and G.playing_card + 1) or 1
+                        local card = Card(G.opponent_play.T.x + G.opponent_play.T.w/2, G.opponent_play.T.y, G.CARD_W, G.CARD_H, front, G.P_CENTERS.m_stone, {playing_card = G.playing_card,is_opponent = true})
+                        card:start_materialize({G.C.SECONDARY_SET.Enhanced})
+                        G.opponent_play:emplace(card)
+                        table.insert(G.opponent_playing_cards, card)
+                        return true
+                    end}))
+                opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_plus_stone'), colour = G.C.SECONDARY_SET.Enhanced})
+
+                G.E_MANAGER:add_event(Event({
+                    func = function() 
+                        G.opponent_deck.config.card_limit = G.opponent_deck.config.card_limit + 1
+                        return true
+                    end}))
+                    draw_card(G.opponent_play,G.opponent_deck, 90,'up', nil)  
+
+                opponent_playing_card_joker_effects({true})
+            end
+            return
+        elseif context.destroying_card and not context.blueprint then
+            if self.ability.name == 'Sixth Sense' and #context.full_hand == 1 and context.full_hand[1]:get_id() == 6 and G.GAME.opponent_current_round.hands_played == 0 then
+                if #G.opponent_consumeables.cards + G.GAME.consumeable_buffer < G.opponent_consumeables.config.card_limit then
+                    G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
+                    G.E_MANAGER:add_event(Event({
+                        trigger = 'before',
+                        delay = 0.0,
+                        func = (function()
+                                local card = create_card('Spectral',G.opponent_consumeables, nil, nil, nil, nil, nil, 'sixth',true)
+                                card:opponent_add_to_deck()
+                                G.opponent_consumeables:emplace(card)
+                                G.GAME.consumeable_buffer = 0
+                            return true
+                        end)}))
+                    opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_plus_spectral'), colour = G.C.SECONDARY_SET.Spectral})
+                end
+               return true
+            end
+            return nil
+        elseif context.cards_destroyed then
+            if self.ability.name == 'Caino' and not context.blueprint then
+                local faces = 0
+                for k, v in ipairs(context.glass_shattered) do
+                    if v:is_face() then
+                        faces = faces + 1
+                    end
+                end
+                if faces > 0 then
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                            self.ability.caino_xmult = self.ability.caino_xmult + faces*self.ability.extra
+                          return true
+                        end
+                      }))
+                    opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_xmult', vars = {self.ability.caino_xmult + faces*self.ability.extra}}})
+                    return true
+                end
+              }))
+                end
+
+                return
+            end
+            if self.ability.name == 'Glass Joker' and not context.blueprint then
+                local glasses = 0
+                for k, v in ipairs(context.glass_shattered) do
+                    if v.shattered then
+                        glasses = glasses + 1
+                    end
+                end
+                if glasses > 0 then
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                            self.ability.x_mult = self.ability.x_mult + self.ability.extra*glasses
+                          return true
+                        end
+                      }))
+                    opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_xmult', vars = {self.ability.x_mult + self.ability.extra*glasses}}})
+                    return true
+                end
+              }))
+                end
+
+                return
+            end
+            
+        elseif context.remove_playing_cards then
+            if self.ability.name == 'Caino' and not context.blueprint then
+                local face_cards = 0
+                for k, val in ipairs(context.removed) do
+                    if val:is_face() then face_cards = face_cards + 1 end
+                end
+                if face_cards > 0 then
+                    self.ability.caino_xmult = self.ability.caino_xmult + face_cards*self.ability.extra
+                    G.E_MANAGER:add_event(Event({
+                    func = function() opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_xmult', vars = {self.ability.caino_xmult}}}); return true
+                    end}))
+                end
+                return
+            end
+
+            if self.ability.name == 'Glass Joker' and not context.blueprint then
+                local glass_cards = 0
+                for k, val in ipairs(context.removed) do
+                    if val.shattered then glass_cards = glass_cards + 1 end
+                end
+                if glass_cards > 0 then 
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                            self.ability.x_mult = self.ability.x_mult + self.ability.extra*glass_cards
+                        return true
+                        end
+                    }))
+                    opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type = 'variable', key = 'a_xmult', vars = {self.ability.x_mult + self.ability.extra*glass_cards}}})
+                    return true
+                        end
+                    }))
+                end
+                return
+            end
+        elseif context.using_consumeable then
+            if self.ability.name == 'Glass Joker' and not context.blueprint and context.consumeable.ability.name == 'The Hanged Man'  then
+                local shattered_glass = 0
+                for k, val in ipairs(G.opponent_hand.highlighted) do
+                    if val.ability.name == 'Glass Card' then shattered_glass = shattered_glass + 1 end
+                end
+                if shattered_glass > 0 then
+                    self.ability.x_mult = self.ability.x_mult + self.ability.extra*shattered_glass
+                    G.E_MANAGER:add_event(Event({
+                        func = function() opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type='variable',key='a_xmult',vars={self.ability.x_mult}}}); return true
+                        end}))
+                end
+                return
+            end
+            if self.ability.name == 'Fortune Teller' and not context.blueprint and (context.consumeable.ability.set == "Tarot") then
+                G.E_MANAGER:add_event(Event({
+                    func = function() opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type='variable',key='a_mult',vars={G.GAME.consumeable_usage_total.tarot}}}); return true
+                    end}))
+            end
+            if self.ability.name == 'Constellation' and not context.blueprint and context.consumeable.ability.set == 'Planet' then
+                self.ability.x_mult = self.ability.x_mult + self.ability.extra
+                G.E_MANAGER:add_event(Event({
+                    func = function() opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type='variable',key='a_xmult',vars={self.ability.x_mult}}}); return true
+                    end}))
+                return
+            end
+            return
+        elseif context.debuffed_hand then 
+            if self.ability.name == 'Matador' then
+                if G.GAME.blind.triggered then 
+                    opponent_ease_dollars(self.ability.extra)
+                    G.GAME.dollar_buffer = (G.GAME.dollar_buffer or 0) + self.ability.extra
+                    G.E_MANAGER:add_event(Event({func = (function() G.GAME.dollar_buffer = 0; return true end)}))
+                    return {
+                        message = localize('$')..self.ability.extra,
+                        dollars = self.ability.extra,
+                        colour = G.C.MONEY
+                    }
+                end
+            end
+        elseif context.pre_discard then
+            if self.ability.name == 'Burnt Joker' and G.GAME.opponent_current_round.discards_used <= 0 and not context.hook then
+                local text,disp_text = G.FUNCS.get_poker_hand_info(G.opponent_hand.highlighted,true)
+                opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('k_upgrade_ex')})
+                opponent_update_hand_text({sound = 'button', volume = 0.7, pitch = 0.8, delay = 0.3}, {handname=localize(text, 'poker_hands'),chips = G.GAME.opponent_hands[text].chips, mult = G.GAME.opponent_hands[text].mult, level=G.GAME.opponent_hands[text].level})
+                opponent_level_up_hand(context.blueprint_card or self, text, nil, 1)
+                opponent_update_hand_text({sound = 'button', volume = 0.7, pitch = 1.1, delay = 0}, {mult = 0, chips = 0, handname = '', level = ''})
+            end
+        elseif context.discard then
+            if self.ability.name == 'Ramen' and not context.blueprint then
+                if self.ability.x_mult - self.ability.extra <= 1 then 
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                            play_sound('tarot1')
+                            self.T.r = -0.2
+                            self:juice_up(0.3, 0.4)
+                            self.states.drag.is = true
+                            self.children.center.pinch.x = true
+                            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.3, blockable = false,
+                                func = function()
+                                        G.opponent_jokers:remove_card(self)
+                                        self:remove()
+                                        self = nil
+                                    return true; end})) 
+                            return true
+                        end
+                    })) 
+                    return {
+                        message = localize('k_eaten_ex'),
+                        colour = G.C.FILTER
+                    }
+                else
+                    self.ability.x_mult = self.ability.x_mult - self.ability.extra
+                    return {
+                        delay = 0.2,
+                        message = localize{type='variable',key='a_xmult_minus',vars={self.ability.extra}},
+                        colour = G.C.RED
+                    }
+                end
+            end
+            if self.ability.name == 'Yorick' and not context.blueprint then
+                if self.ability.yorick_discards <= 1 then
+                    self.ability.yorick_discards = self.ability.extra.discards
+                    self.ability.x_mult = self.ability.x_mult + self.ability.extra.xmult
+                    return {
+                        delay = 0.2,
+                        message = localize{type='variable',key='a_xmult',vars={self.ability.x_mult}},
+                        colour = G.C.RED
+                    }
+                else
+                    self.ability.yorick_discards = self.ability.yorick_discards - 1
+                end
+                return
+            end
+            if self.ability.name == 'Trading Card' and not context.blueprint and 
+            G.GAME.opponent_current_round.discards_used <= 0 and #context.full_hand == 1 then
+                opponent_ease_dollars(self.ability.extra)
+                return {
+                    message = localize('$')..self.ability.extra,
+                    colour = G.C.MONEY,
+                    delay = 0.45, 
+                    remove = true,
+                    card = self
+                }
+            end
+            
+            if self.ability.name == 'Castle' and
+            not context.other_card.debuff and
+            context.other_card:is_suit(G.GAME.opponent_current_round.castle_card.suit) and not context.blueprint then
+                self.ability.extra.chips = self.ability.extra.chips + self.ability.extra.chip_mod
+                  
+                return {
+                    message = localize('k_upgrade_ex'),
+                    card = self,
+                    colour = G.C.CHIPS
+                }
+            end
+            if self.ability.name == 'Mail-In Rebate' and
+            not context.other_card.debuff and
+            context.other_card:get_id() == G.GAME.opponent_current_round.mail_card.id then
+                opponent_ease_dollars(self.ability.extra)
+                return {
+                    message = localize('$')..self.ability.extra,
+                    colour = G.C.MONEY,
+                    card = self
+                }
+            end
+            if self.ability.name == 'Hit the Road' and
+            not context.other_card.debuff and
+            context.other_card:get_id() == 11 and not context.blueprint then
+                self.ability.x_mult = self.ability.x_mult + self.ability.extra
+                return {
+                    message = localize{type='variable',key='a_xmult',vars={self.ability.x_mult}},
+                        colour = G.C.RED,
+                        delay = 0.45, 
+                    card = self
+                }
+            end
+            if self.ability.name == 'Green Joker' and not context.blueprint and context.other_card == context.full_hand[#context.full_hand] then
+                local prev_mult = self.ability.mult
+                self.ability.mult = math.max(0, self.ability.mult - self.ability.extra.discard_sub)
+                if self.ability.mult ~= prev_mult then 
+                    return {
+                        message = localize{type='variable',key='a_mult_minus',vars={self.ability.extra.discard_sub}},
+                        colour = G.C.RED,
+                        card = self
+                    }
+                end
+            end
+            
+            if self.ability.name == 'Faceless Joker' and context.other_card == context.full_hand[#context.full_hand] then
+                local face_cards = 0
+                for k, v in ipairs(context.full_hand) do
+                    if v:is_face() then face_cards = face_cards + 1 end
+                end
+                if face_cards >= self.ability.extra.faces then
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                            opponent_ease_dollars(self.ability.extra.dollars)
+                            opponent_card_eval_status_text(context.blueprint_card or self, 'extra', nil, nil, nil, {message = localize('$')..self.ability.extra.dollars,colour = G.C.MONEY, delay = 0.45})
+                            return true
+                        end}))
+                    return
+                end
+            end
+            return
+        elseif context.end_of_round then
+            if context.individual then
+
+            elseif context.repetition then
+                if context.cardarea == G.opponent_hand then
+                    if self.ability.name == 'Mime' and
+                    (next(context.card_effects[1]) or #context.card_effects > 1) then
+                        return {
+                            message = localize('k_again_ex'),
+                            repetitions = self.ability.extra,
+                            card = self
+                        }
+                    end
+                end
+            elseif not context.blueprint then
+                if self.ability.name == 'Campfire' and G.GAME.blind.boss and self.ability.x_mult > 1 or
+                    (BALATRO_VS_CTX.network.is_live and BALATRO_VS_CTX.rounds_played % 3 == 0) then
+                    self.ability.x_mult = 1
+                    return {
+                        message = localize('k_reset'),
+                        colour = G.C.RED
+                    }
+                end
+                if self.ability.name == 'Rocket' and G.GAME.blind.boss then
+                    self.ability.extra.dollars = self.ability.extra.dollars + self.ability.extra.increase
+                    return {
+                        message = localize('k_upgrade_ex'),
+                        colour = G.C.MONEY
+                    }
+                end
+                if self.ability.name == 'Turtle Bean' and not context.blueprint then
+                    if self.ability.extra.h_size - self.ability.extra.h_mod <= 0 then 
+                        G.E_MANAGER:add_event(Event({
+                            func = function()
+                                play_sound('tarot1')
+                                self.T.r = -0.2
+                                self:juice_up(0.3, 0.4)
+                                self.states.drag.is = true
+                                self.children.center.pinch.x = true
+                                G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.3, blockable = false,
+                                    func = function()
+                                            G.opponent_jokers:remove_card(self)
+                                            self:remove()
+                                            self = nil
+                                        return true; end})) 
+                                return true
+                            end
+                        })) 
+                        return {
+                            message = localize('k_eaten_ex'),
+                            colour = G.C.FILTER
+                        }
+                    else
+                        self.ability.extra.h_size = self.ability.extra.h_size - self.ability.extra.h_mod
+                        G.opponent_hand:opponent_change_size(- self.ability.extra.h_mod)
+                        return {
+                            message = localize{type='variable',key='a_handsize_minus',vars={self.ability.extra.h_mod}},
+                            colour = G.C.FILTER
+                        }
+                    end
+                end
+                if self.ability.name == 'Invisible Joker' and not context.blueprint then
+                    self.ability.invis_rounds = self.ability.invis_rounds + 1
+                    if self.ability.invis_rounds == self.ability.extra then 
+                        local eval = function(card) return not card.REMOVED end
+                        juice_card_until(self, eval, true)
+                    end
+                    return {
+                        message = (self.ability.invis_rounds < self.ability.extra) and (self.ability.invis_rounds..'/'..self.ability.extra) or localize('k_active_ex'),
+                        colour = G.C.FILTER
+                    }
+                end
+                if self.ability.name == 'Popcorn' and not context.blueprint then
+                    if self.ability.mult - self.ability.extra <= 0 then 
+                        G.E_MANAGER:add_event(Event({
+                            func = function()
+                                play_sound('tarot1')
+                                self.T.r = -0.2
+                                self:juice_up(0.3, 0.4)
+                                self.states.drag.is = true
+                                self.children.center.pinch.x = true
+                                G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.3, blockable = false,
+                                    func = function()
+                                            G.opponent_jokers:remove_card(self)
+                                            self:remove()
+                                            self = nil
+                                        return true; end})) 
+                                return true
+                            end
+                        })) 
+                        return {
+                            message = localize('k_eaten_ex'),
+                            colour = G.C.RED
+                        }
+                    else
+                        self.ability.mult = self.ability.mult - self.ability.extra
+                        return {
+                            message = localize{type='variable',key='a_mult_minus',vars={self.ability.extra}},
+                            colour = G.C.MULT
+                        }
+                    end
+                end
+                if self.ability.name == 'To Do List' and not context.blueprint then
+                    local _poker_hands = {}
+                    for k, v in pairs(G.GAME.opponent_hands) do
+                        if v.visible and k ~= self.ability.to_do_poker_hand then _poker_hands[#_poker_hands+1] = k end
+                    end
+                    self.ability.to_do_poker_hand = pseudorandom_element(_poker_hands, opponent_pseudoseed('to_do'))
+                    return {
+                        message = localize('k_reset')
+                    }
+                end
+                if self.ability.name == 'Egg' then
+                    self.ability.extra_value = self.ability.extra_value + self.ability.extra
+                    self:set_cost()
+                    return {
+                        message = localize('k_val_up'),
+                        colour = G.C.MONEY
+                    }
+                end
+                if self.ability.name == 'Gift Card' then
+                    for k, v in ipairs(G.opponent_jokers.cards) do
+                        if v.set_cost then 
+                            v.ability.extra_value = (v.ability.extra_value or 0) + self.ability.extra
+                            v:set_cost()
+                        end
+                    end
+                    for k, v in ipairs(G.opponent_consumeables.cards) do
+                        if v.set_cost then 
+                            v.ability.extra_value = (v.ability.extra_value or 0) + self.ability.extra
+                            v:set_cost()
+                        end
+                    end
+                    return {
+                        message = localize('k_val_up'),
+                        colour = G.C.MONEY
+                    }
+                end
+                if self.ability.name == 'Hit the Road' and self.ability.x_mult > 1 then
+                    self.ability.x_mult = 1
+                    return {
+                        message = localize('k_reset'),
+                        colour = G.C.RED
+                    }
+                end
+                
+                if self.ability.name == 'Gros Michel' or self.ability.name == 'Cavendish' then
+                    if pseudorandom(self.ability.name == 'Cavendish' and 'cavendish' or 'gros_michel',nil,nil,true) < G.GAME.opponent_probabilities.normal/self.ability.extra.odds then 
+                        G.E_MANAGER:add_event(Event({
+                            func = function()
+                                play_sound('tarot1')
+                                self.T.r = -0.2
+                                self:juice_up(0.3, 0.4)
+                                self.states.drag.is = true
+                                self.children.center.pinch.x = true
+                                G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.3, blockable = false,
+                                    func = function()
+                                            G.opponent_jokers:remove_card(self)
+                                            self:remove()
+                                            self = nil
+                                        return true; end})) 
+                                return true
+                            end
+                        })) 
+                        if self.ability.name == 'Gros Michel' then G.GAME.pool_flags.gros_michel_extinct = true end
+                        return {
+                            message = localize('k_extinct_ex')
+                        }
+                    else
+                        return {
+                            message = localize('k_safe_ex')
+                        }
+                    end
+                end
+                if self.ability.name == 'Mr. Bones' and context.game_over and 
+                G.GAME.chips/G.GAME.blind.chips >= 0.25 then
+                    G.E_MANAGER:add_event(Event({
+                        func = function()
+                            G.opponent_hand_text_area.blind_chips:juice_up()
+                            G.opponent_hand_text_area.game_chips:juice_up()
+                            play_sound('tarot1')
+                            self:start_dissolve()
+                            return true
+                        end
+                    })) 
+                    return {
+                        message = localize('k_saved_ex'),
+                        saved = true,
+                        colour = G.C.RED
+                    }
+                end
+            end
+        elseif context.individual then
+            if context.cardarea == G.opponent_play then
+                if self.ability.name == 'Hiker' then
+                        context.other_card.ability.perma_bonus = context.other_card.ability.perma_bonus or 0
+                        context.other_card.ability.perma_bonus = context.other_card.ability.perma_bonus + self.ability.extra
+                        return {
+                            extra = {message = localize('k_upgrade_ex'), colour = G.C.CHIPS},
+                            colour = G.C.CHIPS,
+                            card = self
+                        }
+                end
+                if self.ability.name == 'Lucky Cat' and context.other_card.lucky_trigger and not context.blueprint then
+                    self.ability.x_mult = self.ability.x_mult + self.ability.extra
+                    return {
+                        extra = {focus = self, message = localize('k_upgrade_ex'), colour = G.C.MULT},
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Wee Joker' and
+                    context.other_card:get_id() == 2 and not context.blueprint then
+                        self.ability.extra.chips = self.ability.extra.chips + self.ability.extra.chip_mod
+                        
+                        return {
+                            extra = {focus = self, message = localize('k_upgrade_ex')},
+                            card = self,
+                            colour = G.C.CHIPS
+                        }
+                end
+                if self.ability.name == 'Photograph' then
+                    local first_face = nil
+                    for i = 1, #context.scoring_hand do
+                        if context.scoring_hand[i]:is_face() then first_face = context.scoring_hand[i]; break end
+                    end
+                    if context.other_card == first_face then
+                        return {
+                            x_mult = self.ability.extra,
+                            colour = G.C.RED,
+                            card = self
+                        }
+                    end
+                end
+                if self.ability.name == '8 Ball' and #G.opponent_consumeables.cards + G.GAME.opponent_consumeable_buffer < G.opponent_consumeables.config.card_limit then
+                    if (context.other_card:get_id() == 8) and (pseudorandom('8ball',nil,nil,true) < G.GAME.opponent_probabilities.normal/self.ability.extra) then
+                        G.GAME.opponent_consumeable_buffer = G.GAME.opponent_consumeable_buffer + 1
+                        return {
+                            extra = {focus = self, message = localize('k_plus_tarot'), func = function()
+                                G.E_MANAGER:add_event(Event({
+                                    trigger = 'before',
+                                    delay = 0.0,
+                                    func = (function()
+                                            local card = create_card('Tarot',G.opponent_consumeables, nil, nil, nil, nil, nil, '8ba',true)
+                                            card:opponent_add_to_deck()
+                                            G.opponent_consumeables:emplace(card)
+                                            G.GAME.opponent_consumeable_buffer = 0
+                                        return true
+                                    end)}))
+                            end},
+                            colour = G.C.SECONDARY_SET.Tarot,
+                            card = self
+                        }
+                    end
+                end
+                if self.ability.name == 'The Idol' and
+                    context.other_card:get_id() == G.GAME.opponent_current_round.idol_card.id and 
+                    context.other_card:is_suit(G.GAME.opponent_current_round.idol_card.suit) then
+                        return {
+                            x_mult = self.ability.extra,
+                            colour = G.C.RED,
+                            card = self
+                        }
+                    end
+                if self.ability.name == 'Scary Face' and (
+                    context.other_card:is_face()) then
+                        return {
+                            chips = self.ability.extra,
+                            card = self
+                        }
+                    end
+                if self.ability.name == 'Smiley Face' and (
+                    context.other_card:is_face()) then
+                        return {
+                            mult = self.ability.extra,
+                            card = self
+                        }
+                    end
+                if self.ability.name == 'Golden Ticket' and
+                    context.other_card.ability.name == 'Gold Card' then
+                        G.GAME.dollar_buffer = (G.GAME.dollar_buffer or 0) + self.ability.extra
+                        G.E_MANAGER:add_event(Event({func = (function() G.GAME.dollar_buffer = 0; return true end)}))
+                        return {
+                            dollars = self.ability.extra,
+                            card = self
+                        }
+                    end
+                if self.ability.name == 'Scholar' and
+                    context.other_card:get_id() == 14 then
+                        return {
+                            chips = self.ability.extra.chips,
+                            mult = self.ability.extra.mult,
+                            card = self
+                        }
+                    end
+                if self.ability.name == 'Walkie Talkie' and
+                (context.other_card:get_id() == 10 or context.other_card:get_id() == 4) then
+                    return {
+                        chips = self.ability.extra.chips,
+                        mult = self.ability.extra.mult,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Business Card' and
+                    context.other_card:is_face() and
+                    pseudorandom('business',nil,nil,true) < G.GAME.opponent_probabilities.normal/self.ability.extra then
+                        G.GAME.dollar_buffer = (G.GAME.dollar_buffer or 0) + 2
+                        G.E_MANAGER:add_event(Event({func = (function() G.GAME.dollar_buffer = 0; return true end)}))
+                        return {
+                            dollars = 2,
+                            card = self
+                        }
+                    end
+                if self.ability.name == 'Fibonacci' and (
+                context.other_card:get_id() == 2 or 
+                context.other_card:get_id() == 3 or 
+                context.other_card:get_id() == 5 or 
+                context.other_card:get_id() == 8 or 
+                context.other_card:get_id() == 14) then
+                    return {
+                        mult = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Even Steven' and
+                context.other_card:get_id() <= 10 and 
+                context.other_card:get_id() >= 0 and
+                context.other_card:get_id()%2 == 0
+                then
+                    return {
+                        mult = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Odd Todd' and
+                ((context.other_card:get_id() <= 10 and 
+                context.other_card:get_id() >= 0 and
+                context.other_card:get_id()%2 == 1) or
+                (context.other_card:get_id() == 14))
+                then
+                    return {
+                        chips = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.effect == 'Suit Mult' and
+                    context.other_card:is_suit(self.ability.extra.suit) then
+                    return {
+                        mult = self.ability.extra.s_mult,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Rough Gem' and
+                context.other_card:is_suit("Diamonds") then
+                    G.GAME.dollar_buffer = (G.GAME.dollar_buffer or 0) + self.ability.extra
+                    G.E_MANAGER:add_event(Event({func = (function() G.GAME.dollar_buffer = 0; return true end)}))
+                    return {
+                        dollars = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Onyx Agate' and
+                context.other_card:is_suit("Clubs") then
+                    return {
+                        mult = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Arrowhead' and
+                context.other_card:is_suit("Spades") then
+                    return {
+                        chips = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name ==  'Bloodstone' and
+                context.other_card:is_suit("Hearts") and 
+                pseudorandom('bloodstone',nil,nil,true) < G.GAME.opponent_probabilities.normal/self.ability.extra.odds then
+                    return {
+                        x_mult = self.ability.extra.Xmult,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Ancient Joker' and
+                context.other_card:is_suit(G.GAME.opponent_current_round.ancient_card.suit) then
+                    return {
+                        x_mult = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Triboulet' and
+                    (context.other_card:get_id() == 12 or context.other_card:get_id() == 13) then
+                        return {
+                            x_mult = self.ability.extra,
+                            colour = G.C.RED,
+                            card = self
+                        }
+                    end
+            end
+            if context.cardarea == G.opponent_hand then
+                    if self.ability.name == 'Shoot the Moon' and
+                        context.other_card:get_id() == 12 then
+                        if context.other_card.debuff then
+                            return {
+                                message = localize('k_debuffed'),
+                                colour = G.C.RED,
+                                card = self,
+                            }
+                        else
+                            return {
+                                h_mult = 13,
+                                card = self
+                            }
+                        end
+                    end
+                    if self.ability.name == 'Baron' and
+                        context.other_card:get_id() == 13 then
+                        if context.other_card.debuff then
+                            return {
+                                message = localize('k_debuffed'),
+                                colour = G.C.RED,
+                                card = self,
+                            }
+                        else
+                            return {
+                                x_mult = self.ability.extra,
+                                card = self
+                            }
+                        end
+                    end
+                    if self.ability.name == 'Reserved Parking' and
+                    context.other_card:is_face() and
+                    pseudorandom('parking',nil,nil,true) < G.GAME.opponent_probabilities.normal/self.ability.extra.odds then
+                        if context.other_card.debuff then
+                            return {
+                                message = localize('k_debuffed'),
+                                colour = G.C.RED,
+                                card = self,
+                            }
+                        else
+                            G.GAME.dollar_buffer = (G.GAME.dollar_buffer or 0) + self.ability.extra.dollars
+                            G.E_MANAGER:add_event(Event({func = (function() G.GAME.dollar_buffer = 0; return true end)}))
+                            return {
+                                dollars = self.ability.extra.dollars,
+                                card = self
+                            }
+                        end
+                    end
+                    if self.ability.name == 'Raised Fist' then
+                        local temp_Mult, temp_ID = 15, 15
+                        local raised_card = nil
+                        for i=1, #G.opponent_hand.cards do
+                            if temp_ID >= G.opponent_hand.cards[i].base.id and G.opponent_hand.cards[i].ability.effect ~= 'Stone Card' then temp_Mult = G.opponent_hand.cards[i].base.nominal; temp_ID = G.opponent_hand.cards[i].base.id; raised_card = G.opponent_hand.cards[i] end
+                        end
+                        if raised_card == context.other_card then 
+                            if context.other_card.debuff then
+                                return {
+                                    message = localize('k_debuffed'),
+                                    colour = G.C.RED,
+                                    card = self,
+                                }
+                            else
+                                return {
+                                    h_mult = 2*temp_Mult,
+                                    card = self,
+                                }
+                            end
+                        end
+                    end
+            end
+        elseif context.repetition then
+            if context.cardarea == G.opponent_play then
+                if self.ability.name == 'Sock and Buskin' and (
+                context.other_card:is_face()) then
+                    return {
+                        message = localize('k_again_ex'),
+                        repetitions = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Hanging Chad' and (
+                context.other_card == context.scoring_hand[1]) then
+                    return {
+                        message = localize('k_again_ex'),
+                        repetitions = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Dusk' and G.GAME.opponent_current_round.hands_left == 0 then
+                    return {
+                        message = localize('k_again_ex'),
+                        repetitions = self.ability.extra,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Seltzer' then
+                    return {
+                        message = localize('k_again_ex'),
+                        repetitions = 1,
+                        card = self
+                    }
+                end
+                if self.ability.name == 'Hack' and (
+                context.other_card:get_id() == 2 or 
+                context.other_card:get_id() == 3 or 
+                context.other_card:get_id() == 4 or 
+                context.other_card:get_id() == 5) then
+                    return {
+                        message = localize('k_again_ex'),
+                        repetitions = self.ability.extra,
+                        card = self
+                    }
+                end
+            end
+            if context.cardarea == G.opponent_hand then
+                if self.ability.name == 'Mime' and
+                (next(context.card_effects[1]) or #context.card_effects > 1) then
+                    return {
+                        message = localize('k_again_ex'),
+                        repetitions = self.ability.extra,
+                        card = self
+                    }
+                end
+            end
+        elseif context.other_joker then
+            if self.ability.name == 'Baseball Card' and context.other_joker.config.center.rarity == 2 and self ~= context.other_joker then
+                G.E_MANAGER:add_event(Event({
+                    func = function()
+                        context.other_joker:juice_up(0.5, 0.5)
+                        return true
+                    end
+                })) 
+                return {
+                    message = localize{type='variable',key='a_xmult',vars={self.ability.extra}},
+                    Xmult_mod = self.ability.extra
+                }
+            end
+        else
+            if context.cardarea == G.opponent_jokers then
+                if context.before then
+                    if self.ability.name == 'Spare Trousers' and (next(context.poker_hands['Two Pair']) or next(context.poker_hands['Full House'])) and not context.blueprint then
+                        self.ability.mult = self.ability.mult + self.ability.extra
+                        return {
+                            message = localize('k_upgrade_ex'),
+                            colour = G.C.RED,
+                            card = self
+                        }
+                    end
+                    if self.ability.name == 'Space Joker' and pseudorandom('space',nil,nil,true) < G.GAME.opponent_probabilities.normal/self.ability.extra then
+                        return {
+                            card = self,
+                            level_up = true,
+                            message = localize('k_level_up_ex')
+                        }
+                    end
+                    if self.ability.name == 'Square Joker' and #context.full_hand == 4 and not context.blueprint then
+                        self.ability.extra.chips = self.ability.extra.chips + self.ability.extra.chip_mod
+                        return {
+                            message = localize('k_upgrade_ex'),
+                            colour = G.C.CHIPS,
+                            card = self
+                        }
+                    end
+                    if self.ability.name == 'Runner' and next(context.poker_hands['Straight']) and not context.blueprint then
+                        self.ability.extra.chips = self.ability.extra.chips + self.ability.extra.chip_mod
+                        return {
+                            message = localize('k_upgrade_ex'),
+                            colour = G.C.CHIPS,
+                            card = self
+                        }
+                    end
+                    if self.ability.name == 'Midas Mask' and not context.blueprint then
+                        local faces = {}
+                        for k, v in ipairs(context.scoring_hand) do
+                            if v:is_face() then 
+                                faces[#faces+1] = v
+                                v:set_ability(G.P_CENTERS.m_gold, nil, true)
+                                G.E_MANAGER:add_event(Event({
+                                    func = function()
+                                        v:juice_up()
+                                        return true
+                                    end
+                                })) 
+                            end
+                        end
+                        if #faces > 0 then 
+                            return {
+                                message = localize('k_gold'),
+                                colour = G.C.MONEY,
+                                card = self
+                            }
+                        end
+                    end
+                    if self.ability.name == 'Vampire' and not context.blueprint then
+                        local enhanced = {}
+                        for k, v in ipairs(context.scoring_hand) do
+                            if v.config.center and (v.config.center.name ~= "Default Base") and not v.debuff and not v.vampired then 
+                                enhanced[#enhanced+1] = v
+                                v.vampired = true
+                                v:set_ability(G.P_CENTERS.c_base, nil, true)
+                                G.E_MANAGER:add_event(Event({
+                                    func = function()
+                                        v:juice_up()
+                                        v.vampired = nil
+                                        return true
+                                    end
+                                })) 
+                            end
+                        end
+
+                        if #enhanced > 0 then 
+                            self.ability.x_mult = self.ability.x_mult + self.ability.extra*#enhanced
+                            return {
+                                message = localize{type='variable',key='a_xmult',vars={self.ability.x_mult}},
+                                colour = G.C.MULT,
+                                card = self
+                            }
+                        end
+                    end
+                    if self.ability.name == 'To Do List' and context.scoring_name == self.ability.to_do_poker_hand then
+                        opponent_ease_dollars(self.ability.extra.dollars)
+                        G.GAME.dollar_buffer = (G.GAME.dollar_buffer or 0) + self.ability.extra.dollars
+                        G.E_MANAGER:add_event(Event({func = (function() G.GAME.dollar_buffer = 0; return true end)}))
+                        return {
+                            message = localize('$')..self.ability.extra.dollars,
+                            dollars = self.ability.extra.dollars,
+                            colour = G.C.MONEY
+                        }
+                    end
+                    if self.ability.name == 'DNA' and G.GAME.opponent_current_round.hands_played == 0 then
+                        if #context.full_hand == 1 then
+                            --G.playing_card = (G.playing_card and G.playing_card + 1) or 1
+                            local _card = copy_card(context.full_hand[1], nil, nil, G.playing_card)
+                            _card:opponent_add_to_deck()
+                            G.opponent_deck.config.card_limit = G.opponent_deck.config.card_limit + 1
+                            table.insert(G.opponent_playing_cards, _card)
+                            G.opponent_hand:emplace(_card)
+                            _card.states.visible = nil
+
+                            G.E_MANAGER:add_event(Event({
+                                func = function()
+                                    _card:start_materialize()
+                                     G.E_MANAGER:add_event(Event({
+                                        delay = 3.0,
+                                        func = function()
+                                            _card:flip() --flip the opponent card after some delay
+                                            return true
+                                        end
+                                    })) 
+                                    return true
+                                end
+                            })) 
+                            return {
+                                message = localize('k_copied_ex'),
+                                colour = G.C.CHIPS,
+                                card = self,
+                                playing_cards_created = {true}
+                            }
+                        end
+                    end
+                    if self.ability.name == 'Ride the Bus' and not context.blueprint then
+                        local faces = false
+                        for i = 1, #context.scoring_hand do
+                            if context.scoring_hand[i]:is_face() then faces = true end
+                        end
+                        if faces then
+                            local last_mult = self.ability.mult
+                            self.ability.mult = 0
+                            if last_mult > 0 then 
+                                return {
+                                    card = self,
+                                    message = localize('k_reset')
+                                }
+                            end
+                        else
+                            self.ability.mult = self.ability.mult + self.ability.extra
+                        end
+                    end
+                    if self.ability.name == 'Obelisk' and not context.blueprint then
+                        local reset = true
+                        local play_more_than = (G.GAME.opponent_hands[context.scoring_name].played or 0)
+                        for k, v in pairs(G.GAME.opponent_hands) do
+                            if k ~= context.scoring_name and v.played >= play_more_than and v.visible then
+                                reset = false
+                            end
+                        end
+                        if reset then
+                            if self.ability.x_mult > 1 then
+                                self.ability.x_mult = 1
+                                return {
+                                    card = self,
+                                    message = localize('k_reset')
+                                }
+                            end
+                        else
+                            self.ability.x_mult = self.ability.x_mult + self.ability.extra
+                        end
+                    end
+                    if self.ability.name == 'Green Joker' and not context.blueprint then
+                        self.ability.mult = self.ability.mult + self.ability.extra.hand_add
+                        return {
+                            card = self,
+                            message = localize{type='variable',key='a_mult',vars={self.ability.extra.hand_add}}
+                        }
+                    end
+                elseif context.after then
+                    if self.ability.name == 'Ice Cream' and not context.blueprint then
+                        if self.ability.extra.chips - self.ability.extra.chip_mod <= 0 then 
+                            G.E_MANAGER:add_event(Event({
+                                func = function()
+                                    play_sound('tarot1')
+                                    self.T.r = -0.2
+                                    self:juice_up(0.3, 0.4)
+                                    self.states.drag.is = true
+                                    self.children.center.pinch.x = true
+                                    G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.3, blockable = false,
+                                        func = function()
+                                                G.opponent_jokers:remove_card(self)
+                                                self:remove()
+                                                self = nil
+                                            return true; end})) 
+                                    return true
+                                end
+                            })) 
+                            return {
+                                message = localize('k_melted_ex'),
+                                colour = G.C.CHIPS
+                            }
+                        else
+                            self.ability.extra.chips = self.ability.extra.chips - self.ability.extra.chip_mod
+                            return {
+                                message = localize{type='variable',key='a_chips_minus',vars={self.ability.extra.chip_mod}},
+                                colour = G.C.CHIPS
+                            }
+                        end
+                    end
+                    if self.ability.name == 'Seltzer' and not context.blueprint then
+                        if self.ability.extra - 1 <= 0 then 
+                            G.E_MANAGER:add_event(Event({
+                                func = function()
+                                    play_sound('tarot1')
+                                    self.T.r = -0.2
+                                    self:juice_up(0.3, 0.4)
+                                    self.states.drag.is = true
+                                    self.children.center.pinch.x = true
+                                    G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.3, blockable = false,
+                                        func = function()
+                                                G.opponent_jokers:remove_card(self)
+                                                self:remove()
+                                                self = nil
+                                            return true; end})) 
+                                    return true
+                                end
+                            })) 
+                            return {
+                                message = localize('k_drank_ex'),
+                                colour = G.C.FILTER
+                            }
+                        else
+                            self.ability.extra = self.ability.extra - 1
+                            return {
+                                message = self.ability.extra..'',
+                                colour = G.C.FILTER
+                            }
+                        end
+                    end
+                else
+                        if self.ability.name == 'Loyalty Card' then
+                            self.ability.loyalty_remaining = (self.ability.extra.every-1-(G.GAME.hands_played - self.ability.hands_played_at_create))%(self.ability.extra.every+1)
+                            if context.blueprint then
+                                if self.ability.loyalty_remaining == self.ability.extra.every then
+                                    return {
+                                        message = localize{type='variable',key='a_xmult',vars={self.ability.extra.Xmult}},
+                                        Xmult_mod = self.ability.extra.Xmult
+                                    }
+                                end
+                            else
+                                if self.ability.loyalty_remaining == 0 then
+                                    local eval = function(card) return (card.ability.loyalty_remaining == 0) end
+                                    juice_card_until(self, eval, true)
+                                elseif self.ability.loyalty_remaining == self.ability.extra.every then
+                                    return {
+                                        message = localize{type='variable',key='a_xmult',vars={self.ability.extra.Xmult}},
+                                        Xmult_mod = self.ability.extra.Xmult
+                                    }
+                                end
+                            end
+                        end
+                        if self.ability.name ~= 'Seeing Double' and self.ability.x_mult > 1 and (self.ability.type == '' or next(context.poker_hands[self.ability.type])) then
+                            return {
+                                message = localize{type='variable',key='a_xmult',vars={self.ability.x_mult}},
+                                colour = G.C.RED,
+                                Xmult_mod = self.ability.x_mult
+                            }
+                        end
+                        if self.ability.t_mult > 0 and next(context.poker_hands[self.ability.type]) then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.t_mult}},
+                                mult_mod = self.ability.t_mult
+                            }
+                        end
+                        if self.ability.t_chips > 0 and next(context.poker_hands[self.ability.type]) then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.t_chips}},
+                                chip_mod = self.ability.t_chips
+                            }
+                        end
+                        if self.ability.name == 'Half Joker' and #context.full_hand <= self.ability.extra.size then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.extra.mult}},
+                                mult_mod = self.ability.extra.mult
+                            }
+                        end
+                        if self.ability.name == 'Abstract Joker' then
+                            local x = 0
+                            for i = 1, #G.opponent_jokers.cards do
+                                if G.opponent_jokers.cards[i].ability.set == 'Joker' then x = x + 1 end
+                            end
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={x*self.ability.extra}},
+                                mult_mod = x*self.ability.extra
+                            }
+                        end
+                        if self.ability.name == 'Acrobat' and G.GAME.opponent_current_round.hands_left == 0 then
+                            return {
+                                message = localize{type='variable',key='a_xmult',vars={self.ability.extra}},
+                                Xmult_mod = self.ability.extra
+                            }
+                        end
+                        if self.ability.name == 'Mystic Summit' and G.GAME.opponent_current_round.discards_left == self.ability.extra.d_remaining then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.extra.mult}},
+                                mult_mod = self.ability.extra.mult
+                            }
+                        end
+                        if self.ability.name == 'Misprint' then
+                            local temp_Mult = pseudorandom('misprint', self.ability.extra.min, self.ability.extra.max,true)
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={temp_Mult}},
+                                mult_mod = temp_Mult
+                            }
+                        end
+                        if self.ability.name == 'Banner' and G.GAME.opponent_current_round.discards_left > 0 then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={G.GAME.opponent_current_round.discards_left*self.ability.extra}},
+                                chip_mod = G.GAME.opponent_current_round.discards_left*self.ability.extra
+                            }
+                        end
+                        if self.ability.name == 'Stuntman' then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra.chip_mod}},
+                                chip_mod = self.ability.extra.chip_mod,
+                            }
+                        end
+                        if self.ability.name == 'Matador' then
+                            if G.GAME.blind.triggered then 
+                                opponent_ease_dollars(self.ability.extra)
+                                G.GAME.dollar_buffer = (G.GAME.dollar_buffer or 0) + self.ability.extra
+                                G.E_MANAGER:add_event(Event({func = (function() G.GAME.dollar_buffer = 0; return true end)}))
+                                return {
+                                    message = localize('$')..self.ability.extra,
+                                    dollars = self.ability.extra,
+                                    colour = G.C.MONEY
+                                }
+                            end
+                        end
+                        if self.ability.name == 'Supernova' then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={G.GAME.opponent_hands[context.scoring_name].played}},
+                                mult_mod = G.GAME.opponent_hands[context.scoring_name].played
+                            }
+                        end
+                        if self.ability.name == 'Ceremonial Dagger' and self.ability.mult > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Vagabond' and #G.opponent_consumeables.cards + G.GAME.consumeable_buffer < G.opponent_consumeables.config.card_limit then
+                            if G.GAME.opponent_dollars <= self.ability.extra then
+                                G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
+                                G.E_MANAGER:add_event(Event({
+                                    trigger = 'before',
+                                    delay = 0.0,
+                                    func = (function()
+                                            local card = create_card('Tarot',G.opponent_consumeables, nil, nil, nil, nil, nil, 'vag',true)
+                                            card:opponent_add_to_deck()
+                                            G.opponent_consumeables:emplace(card)
+                                            G.GAME.consumeable_buffer = 0
+                                        return true
+                                    end)}))
+                                return {
+                                    message = localize('k_plus_tarot'),
+                                    card = self
+                                }
+                            end
+                        end
+                        if self.ability.name == 'Superposition' and #G.opponent_consumeables.cards + G.GAME.consumeable_buffer < G.opponent_consumeables.config.card_limit then
+                            local aces = 0
+                            for i = 1, #context.scoring_hand do
+                                if context.scoring_hand[i]:get_id() == 14 then aces = aces + 1 end
+                            end
+                            if aces >= 1 and next(context.poker_hands["Straight"]) then
+                                local card_type = 'Tarot'
+                                G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
+                                G.E_MANAGER:add_event(Event({
+                                    trigger = 'before',
+                                    delay = 0.0,
+                                    func = (function()
+                                            local card = create_card(card_type,G.opponent_consumeables, nil, nil, nil, nil, nil, 'sup',true)
+                                            card:opponent_add_to_deck()
+                                            G.opponent_consumeables:emplace(card)
+                                            G.GAME.consumeable_buffer = 0
+                                        return true
+                                    end)}))
+                                return {
+                                    message = localize('k_plus_tarot'),
+                                    colour = G.C.SECONDARY_SET.Tarot,
+                                    card = self
+                                }
+                            end
+                        end
+                        if self.ability.name == 'Seance' and #G.opponent_consumeables.cards + G.GAME.consumeable_buffer < G.opponent_consumeables.config.card_limit then
+                            if next(context.poker_hands[self.ability.extra.poker_hand]) then
+                                G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
+                                G.E_MANAGER:add_event(Event({
+                                    trigger = 'before',
+                                    delay = 0.0,
+                                    func = (function()
+                                            local card = create_card('Spectral',G.opponent_consumeables, nil, nil, nil, nil, nil, 'sea',true)
+                                            card:opponent_add_to_deck()
+                                            G.opponent_consumeables:emplace(card)
+                                            G.GAME.consumeable_buffer = 0
+                                        return true
+                                    end)}))
+                                return {
+                                    message = localize('k_plus_spectral'),
+                                    colour = G.C.SECONDARY_SET.Spectral,
+                                    card = self
+                                }
+                            end
+                        end
+                        if self.ability.name == 'Flower Pot' then
+                            local suits = {
+                                ['Hearts'] = 0,
+                                ['Diamonds'] = 0,
+                                ['Spades'] = 0,
+                                ['Clubs'] = 0
+                            }
+                            for i = 1, #context.scoring_hand do
+                                if context.scoring_hand[i].ability.name ~= 'Wild Card' then
+                                    if context.scoring_hand[i]:is_suit('Hearts', true) and suits["Hearts"] == 0 then suits["Hearts"] = suits["Hearts"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Diamonds', true) and suits["Diamonds"] == 0  then suits["Diamonds"] = suits["Diamonds"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Spades', true) and suits["Spades"] == 0  then suits["Spades"] = suits["Spades"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Clubs', true) and suits["Clubs"] == 0  then suits["Clubs"] = suits["Clubs"] + 1 end
+                                end
+                            end
+                            for i = 1, #context.scoring_hand do
+                                if context.scoring_hand[i].ability.name == 'Wild Card' then
+                                    if context.scoring_hand[i]:is_suit('Hearts') and suits["Hearts"] == 0 then suits["Hearts"] = suits["Hearts"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Diamonds') and suits["Diamonds"] == 0  then suits["Diamonds"] = suits["Diamonds"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Spades') and suits["Spades"] == 0  then suits["Spades"] = suits["Spades"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Clubs') and suits["Clubs"] == 0  then suits["Clubs"] = suits["Clubs"] + 1 end
+                                end
+                            end
+                            if suits["Hearts"] > 0 and
+                            suits["Diamonds"] > 0 and
+                            suits["Spades"] > 0 and
+                            suits["Clubs"] > 0 then
+                                return {
+                                    message = localize{type='variable',key='a_xmult',vars={self.ability.extra}},
+                                    Xmult_mod = self.ability.extra
+                                }
+                            end
+                        end
+                        if self.ability.name == 'Seeing Double' then
+                            local suits = {
+                                ['Hearts'] = 0,
+                                ['Diamonds'] = 0,
+                                ['Spades'] = 0,
+                                ['Clubs'] = 0
+                            }
+                            for i = 1, #context.scoring_hand do
+                                if context.scoring_hand[i].ability.name ~= 'Wild Card' then
+                                    if context.scoring_hand[i]:is_suit('Hearts') then suits["Hearts"] = suits["Hearts"] + 1 end
+                                    if context.scoring_hand[i]:is_suit('Diamonds') then suits["Diamonds"] = suits["Diamonds"] + 1 end
+                                    if context.scoring_hand[i]:is_suit('Spades') then suits["Spades"] = suits["Spades"] + 1 end
+                                    if context.scoring_hand[i]:is_suit('Clubs') then suits["Clubs"] = suits["Clubs"] + 1 end
+                                end
+                            end
+                            for i = 1, #context.scoring_hand do
+                                if context.scoring_hand[i].ability.name == 'Wild Card' then
+                                    if context.scoring_hand[i]:is_suit('Clubs') and suits["Clubs"] == 0 then suits["Clubs"] = suits["Clubs"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Diamonds') and suits["Diamonds"] == 0  then suits["Diamonds"] = suits["Diamonds"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Spades') and suits["Spades"] == 0  then suits["Spades"] = suits["Spades"] + 1
+                                    elseif context.scoring_hand[i]:is_suit('Hearts') and suits["Hearts"] == 0  then suits["Hearts"] = suits["Hearts"] + 1 end
+                                end
+                            end
+                            if (suits["Hearts"] > 0 or
+                            suits["Diamonds"] > 0 or
+                            suits["Spades"] > 0) and
+                            suits["Clubs"] > 0 then
+                                return {
+                                    message = localize{type='variable',key='a_xmult',vars={self.ability.extra}},
+                                    Xmult_mod = self.ability.extra
+                                }
+                            end
+                        end
+                        if self.ability.name == 'Wee Joker' then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra.chips}},
+                                chip_mod = self.ability.extra.chips, 
+                                colour = G.C.CHIPS
+                            }
+                        end
+                        if self.ability.name == 'Castle' and (self.ability.extra.chips > 0) then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra.chips}},
+                                chip_mod = self.ability.extra.chips, 
+                                colour = G.C.CHIPS
+                            }
+                        end
+                        if self.ability.name == 'Blue Joker' and #G.opponent_deck.cards > 0 then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra*#G.opponent_deck.cards}},
+                                chip_mod = self.ability.extra*#G.opponent_deck.cards, 
+                                colour = G.C.CHIPS
+                            }
+                        end
+                        if self.ability.name == 'Erosion' and (G.GAME.starting_deck_size - #G.opponent_playing_cards) > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.extra*(G.GAME.starting_deck_size - #G.opponent_playing_cards)}},
+                                mult_mod = self.ability.extra*(G.GAME.starting_deck_size - #G.opponent_playing_cards), 
+                                colour = G.C.MULT
+                            }
+                        end
+                        if self.ability.name == 'Square Joker' then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra.chips}},
+                                chip_mod = self.ability.extra.chips, 
+                                colour = G.C.CHIPS
+                            }
+                        end
+                        if self.ability.name == 'Runner' then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra.chips}},
+                                chip_mod = self.ability.extra.chips, 
+                                colour = G.C.CHIPS
+                            }
+                        end
+                        if self.ability.name == 'Ice Cream' then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra.chips}},
+                                chip_mod = self.ability.extra.chips, 
+                                colour = G.C.CHIPS
+                            }
+                        end
+                        if self.ability.name == 'Stone Joker' and self.ability.stone_tally > 0 then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra*self.ability.stone_tally}},
+                                chip_mod = self.ability.extra*self.ability.stone_tally, 
+                                colour = G.C.CHIPS
+                            }
+                        end
+                        if self.ability.name == 'Steel Joker' and self.ability.steel_tally > 0 then
+                            return {
+                                message = localize{type='variable',key='a_xmult',vars={1 + self.ability.extra*self.ability.steel_tally}},
+                                Xmult_mod = 1 + self.ability.extra*self.ability.steel_tally, 
+                                colour = G.C.MULT
+                            }
+                        end
+                        if self.ability.name == 'Bull' and (G.GAME.opponent_dollars + (G.GAME.dollar_buffer or 0)) > 0 then
+                            return {
+                                message = localize{type='variable',key='a_chips',vars={self.ability.extra*math.max(0,(G.GAME.opponent_dollars + (G.GAME.dollar_buffer or 0))) }},
+                                chip_mod = self.ability.extra*math.max(0,(G.GAME.opponent_dollars + (G.GAME.dollar_buffer or 0))), 
+                                colour = G.C.CHIPS
+                            }
+                        end
+                        if self.ability.name == "Driver's License" then
+                            if (self.ability.driver_tally or 0) >= 16 then 
+                                return {
+                                    message = localize{type='variable',key='a_xmult',vars={self.ability.extra}},
+                                    Xmult_mod = self.ability.extra
+                                }
+                            end
+                        end
+                        if self.ability.name == "Blackboard" then
+                            local black_suits, all_cards = 0, 0
+                            for k, v in ipairs(G.opponent_hand.cards) do
+                                all_cards = all_cards + 1
+                                if v:is_suit('Clubs', nil, true) or v:is_suit('Spades', nil, true) then
+                                    black_suits = black_suits + 1
+                                end
+                            end
+                            if black_suits == all_cards then 
+                                return {
+                                    message = localize{type='variable',key='a_xmult',vars={self.ability.extra}},
+                                    Xmult_mod = self.ability.extra
+                                }
+                            end
+                        end
+                        if self.ability.name == "Joker Stencil" then
+                            if (G.opponent_jokers.config.card_limit - #G.opponent_jokers.cards) > 0 then
+                                return {
+                                    message = localize{type='variable',key='a_xmult',vars={self.ability.x_mult}},
+                                    Xmult_mod = self.ability.x_mult
+                                }
+                            end
+                        end
+                        if self.ability.name == 'Swashbuckler' and self.ability.mult > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Joker' then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Spare Trousers' and self.ability.mult > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Ride the Bus' and self.ability.mult > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Flash Card' and self.ability.mult > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Popcorn' and self.ability.mult > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Green Joker' and self.ability.mult > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Fortune Teller' and G.GAME.consumeable_usage_total and G.GAME.consumeable_usage_total.tarot > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={G.GAME.consumeable_usage_total.tarot}},
+                                mult_mod = G.GAME.consumeable_usage_total.tarot
+                            }
+                        end
+                        if self.ability.name == 'Gros Michel' then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.extra.mult}},
+                                mult_mod = self.ability.extra.mult,
+                            }
+                        end
+                        if self.ability.name == 'Cavendish' then
+                            return {
+                                message = localize{type='variable',key='a_xmult',vars={self.ability.extra.Xmult}},
+                                Xmult_mod = self.ability.extra.Xmult,
+                            }
+                        end
+                        if self.ability.name == 'Red Card' and self.ability.mult > 0 then
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.mult}},
+                                mult_mod = self.ability.mult
+                            }
+                        end
+                        if self.ability.name == 'Card Sharp' and G.GAME.opponent_hands[context.scoring_name] and G.GAME.opponent_hands[context.scoring_name].played_this_round > 1 then
+                            return {
+                                message = localize{type='variable',key='a_xmult',vars={self.ability.extra.Xmult}},
+                                Xmult_mod = self.ability.extra.Xmult,
+                            }
+                        end
+                        if self.ability.name == 'Bootstraps' and math.floor((G.GAME.opponent_dollars + (G.GAME.dollar_buffer or 0))/self.ability.extra.dollars) >= 1 then 
+                            return {
+                                message = localize{type='variable',key='a_mult',vars={self.ability.extra.mult*math.floor((G.GAME.opponent_dollars + (G.GAME.dollar_buffer or 0))/self.ability.extra.dollars)}},
+                                mult_mod = self.ability.extra.mult*math.floor((G.GAME.opponent_dollars + (G.GAME.dollar_buffer or 0))/self.ability.extra.dollars)
+                            }
+                        end
+                        if self.ability.name == 'Caino' and self.ability.caino_xmult > 1 then 
+                            return {
+                                message = localize{type='variable',key='a_xmult',vars={self.ability.caino_xmult}},
+                                Xmult_mod = self.ability.caino_xmult
+                            }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+function Card:opponent_add_to_deck(from_debuff)
+    if not self.config.center.discovered then
+        discover_card(self.config.center)
+    end
+    if not self.added_to_deck then
+        self.added_to_deck = true
+        if self.ability.set == 'Enhanced' or self.ability.set == 'Default' then 
+            if self.ability.name == 'Gold Card' and self.seal == 'Gold' and self.playing_card then 
+                check_for_unlock({type = 'double_gold'})
+            end
+            return 
+        end
+
+        if self.edition then
+            if not G.P_CENTERS['e_'..(self.edition.type)].discovered then 
+                discover_card(G.P_CENTERS['e_'..(self.edition.type)])
+            end
+        else
+            if not G.P_CENTERS['e_base'].discovered then 
+                discover_card(G.P_CENTERS['e_base'])
+            end
+        end
+        if self.ability.h_size ~= 0 then
+            G.opponent_hand:opponent_change_size(self.ability.h_size)
+        end
+        if self.ability.d_size > 0 then
+            G.GAME.opponent_round_resets.discards = G.GAME.opponent_round_resets.discards + self.ability.d_size
+            opponent_ease_discard(self.ability.d_size)
+        end
+        if self.ability.name == 'Credit Card' then
+            G.GAME.opponent_bankrupt_at = G.GAME.opponent_bankrupt_at - self.ability.extra
+        end
+        if self.ability.name == 'Chicot' and G.GAME.blind and G.GAME.blind.boss and not G.GAME.blind.disabled then --no blind
+            G.GAME.blind:disable()
+            play_sound('timpani')
+            card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize('ph_boss_disabled')})
+        end
+        if self.ability.name == 'Chaos the Clown' then
+            G.GAME.opponent_current_round.free_rerolls = G.GAME.opponent_current_round.free_rerolls + 1
+            calculate_reroll_cost(true) --huh ?
+        end
+        if self.ability.name == 'Turtle Bean' then
+            G.opponent_hand:opponent_change_size(self.ability.extra.h_size)
+        end
+        if self.ability.name == 'Oops! All 6s' then
+            for k, v in pairs(G.GAME.opponent_probabilities) do 
+                G.GAME.opponent_probabilities[k] = v*2
+            end
+        end
+        if self.ability.name == 'Troubadour' then
+            G.opponent_hand:opponent_change_size(self.ability.extra.h_size)
+            G.GAME.opponent_round_resets.hands = G.GAME.opponent_round_resets.hands + self.ability.extra.h_plays
+        end
+        if self.ability.name == 'Stuntman' then
+            G.opponent_hand:opponent_change_size(-self.ability.extra.h_size)
+        end
+        if self.edition and self.edition.negative then 
+            if from_debuff then 
+                self.ability.queue_negative_removal = nil
+            else
+                if self.ability.consumeable then
+                    G.opponent_consumeables.config.card_limit = G.opponent_consumeables.config.card_limit + 1
+                else
+                    G.opponent_jokers.config.card_limit = G.opponent_jokers.config.card_limit + 1
+                end
+            end
+        end
+        if G.GAME.blind then G.E_MANAGER:add_event(Event({ func = function() G.GAME.blind:set_blind(nil, true, nil); return true end })) end
+    end
+end
+
+function Card:opponent_remove_from_deck(from_debuff)
+    if self.added_to_deck then
+        self.added_to_deck = false
+        if self.ability.h_size ~= 0 then
+            G.opponent_hand:opponent_change_size(-self.ability.h_size)
+        end
+        if self.ability.d_size > 0 then
+            G.GAME.opponent_round_resets.discards = G.GAME.opponent_round_resets.discards - self.ability.d_size
+            opponent_ease_discard(-self.ability.d_size)
+        end
+        if self.ability.name == 'Credit Card' then
+            G.GAME.opponent_bankrupt_at = G.GAME.opponent_bankrupt_at + self.ability.extra
+        end
+        if self.ability.name == 'Chaos the Clown' then
+            G.GAME.opponent_current_round.free_rerolls = G.GAME.opponent_current_round.free_rerolls - 1
+            calculate_reroll_cost(true) -- huh
+        end
+        if self.ability.name == 'Turtle Bean' then
+            G.opponent_hand:opponent_change_size(-self.ability.extra.h_size)
+        end
+        if self.ability.name == 'Oops! All 6s' then
+            for k, v in pairs(G.GAME.opponent_probabilities) do
+                G.GAME.opponent_probabilities[k] = v/2
+            end
+        end
+        if self.ability.name == 'Troubadour' then
+            G.opponent_hand:opponent_change_size(-self.ability.extra.h_size)
+            G.GAME.opponent_round_resets.hands = G.GAME.opponent_round_resets.hands - self.ability.extra.h_plays
+        end
+        if self.ability.name == 'Stuntman' then
+            G.opponent_hand:opponent_change_size(self.ability.extra.h_size)
+        end
+        if self.edition and self.edition.negative and G.opponent_jokers then
+            if from_debuff then
+                self.ability.queue_negative_removal = true 
+            else
+                if self.ability.consumeable then
+                    G.opponent_consumeables.config.card_limit = G.opponent_consumeables.config.card_limit - 1
+                else
+                    G.opponent_jokers.config.card_limit = G.opponent_jokers.config.card_limit - 1
+                end 
+            end
+        end
+    end
+end
+
+function Card:opponent_use_consumeable(area, copier)
+    stop_use()
+    if not copier then set_consumeable_usage(self,true) end
+    if self.debuff then return nil end
+    local used_tarot = copier or self
+
+    if self.ability.consumeable.max_highlighted then
+        opponent_update_hand_text({immediate = true, nopulse = true, delay = 0}, {mult = 0, chips = 0, level = '', handname = ''})
+    end
+
+    if self.ability.consumeable.mod_conv or self.ability.consumeable.suit_conv then
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            play_sound('tarot1')
+            used_tarot:juice_up(0.3, 0.5)
+            return true end }))
+        for i=1, #G.opponent_hand.highlighted do
+            local percent = 1.15 - (i-0.999)/(#G.opponent_hand.highlighted-0.998)*0.3
+            G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.15,func = function() G.opponent_hand.highlighted[i]:flip();play_sound('card1', percent);G.opponent_hand.highlighted[i]:juice_up(0.3, 0.3);return true end }))
+        end
+        delay(0.2)
+        if self.ability.name == 'Death' then
+            local rightmost = G.opponent_hand.highlighted[1]
+            for i=1, #G.opponent_hand.highlighted do if G.opponent_hand.highlighted[i].T.x > rightmost.T.x then rightmost = G.opponent_hand.highlighted[i] end end
+            for i=1, #G.opponent_hand.highlighted do
+                G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.1,func = function()
+                    if G.opponent_hand.highlighted[i] ~= rightmost then
+                        copy_card(rightmost, G.opponent_hand.highlighted[i])
+                    end
+                    return true end }))
+            end  
+        elseif self.ability.name == 'Strength' then
+            for i=1, #G.opponent_hand.highlighted do
+                G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.1,func = function()
+                    local card = G.opponent_hand.highlighted[i]
+                    local suit_prefix = string.sub(card.base.suit, 1, 1)..'_'
+                    local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id+1, 14)
+                    if rank_suffix < 10 then rank_suffix = tostring(rank_suffix)
+                    elseif rank_suffix == 10 then rank_suffix = 'T'
+                    elseif rank_suffix == 11 then rank_suffix = 'J'
+                    elseif rank_suffix == 12 then rank_suffix = 'Q'
+                    elseif rank_suffix == 13 then rank_suffix = 'K'
+                    elseif rank_suffix == 14 then rank_suffix = 'A'
+                    end
+                    card:set_base(G.P_CARDS[suit_prefix..rank_suffix])
+                return true end }))
+            end  
+        elseif self.ability.consumeable.suit_conv then
+            for i=1, #G.opponent_hand.highlighted do
+                G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.1,func = function() G.opponent_hand.highlighted[i]:change_suit(self.ability.consumeable.suit_conv);return true end }))
+            end    
+        else
+            for i=1, #G.opponent_hand.highlighted do
+                G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.1,func = function() G.opponent_hand.highlighted[i]:set_ability(G.P_CENTERS[self.ability.consumeable.mod_conv]);return true end }))
+            end 
+        end
+        for i=1, #G.opponent_hand.highlighted do
+            local percent = 0.85 + (i-0.999)/(#G.opponent_hand.highlighted-0.998)*0.3
+            G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.15,func = function() G.opponent_hand.highlighted[i]:flip();play_sound('tarot2', percent, 0.6);G.opponent_hand.highlighted[i]:juice_up(0.3, 0.3);return true end }))
+        end
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.2,func = function() G.opponent_hand:unhighlight_all(); return true end }))
+        delay(0.5)
+    end
+    if self.ability.name == 'Black Hole' then
+        opponent_update_hand_text({sound = 'button', volume = 0.7, pitch = 0.8, delay = 0.3}, {handname=localize('k_all_hands'),chips = '...', mult = '...', level=''})
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.2, func = function()
+            play_sound('tarot1')
+            self:juice_up(0.8, 0.5)
+            G.TAROT_INTERRUPT_PULSE = true
+            return true end }))
+        opponent_update_hand_text({delay = 0}, {mult = '+', StatusText = true})
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.9, func = function()
+            play_sound('tarot1')
+            self:juice_up(0.8, 0.5)
+            return true end }))
+        opponent_update_hand_text({delay = 0}, {chips = '+', StatusText = true})
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.9, func = function()
+            play_sound('tarot1')
+            self:juice_up(0.8, 0.5)
+            G.TAROT_INTERRUPT_PULSE = nil
+            return true end }))
+        opponent_update_hand_text({sound = 'button', volume = 0.7, pitch = 0.9, delay = 0}, {level='+1'})
+        delay(1.3)
+        for k, v in pairs(G.GAME.opponent_hands) do
+            opponent_level_up_hand(self, k, true)
+        end
+        opponent_update_hand_text({sound = 'button', volume = 0.7, pitch = 1.1, delay = 0}, {mult = 0, chips = 0, handname = '', level = ''})
+    end
+    if self.ability.name == 'Talisman' or self.ability.name == 'Deja Vu' or self.ability.name == 'Trance' or self.ability.name == 'Medium' then
+        local conv_card = G.opponent_hand.highlighted[1]
+        G.E_MANAGER:add_event(Event({func = function()
+            play_sound('tarot1')
+            used_tarot:juice_up(0.3, 0.5)
+            return true end }))
+        
+        G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.1,func = function()
+            conv_card:set_seal(self.ability.extra, nil, true)
+            return true end }))
+        
+        delay(0.5)
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.2,func = function() G.opponent_hand:unhighlight_all(); return true end }))
+    end
+    if self.ability.name == 'Aura' then 
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            local over = false
+            local edition = poll_edition('aura', nil, true, true,true)
+            local aura_card = G.opponent_hand.highlighted[1]
+            aura_card:set_edition(edition, true)
+            used_tarot:juice_up(0.3, 0.5)
+        return true end }))
+    end
+    if self.ability.name == 'Cryptid' then
+        G.E_MANAGER:add_event(Event({
+            func = function()
+                local _first_dissolve = nil
+                local new_cards = {}
+                for i = 1, self.ability.extra do
+                    G.playing_card = (G.playing_card and G.playing_card + 1) or 1
+                    local _card = copy_card(G.opponent_hand.highlighted[1], nil, nil, G.playing_card)
+                    _card:flip()
+                    _card:opponent_add_to_deck()
+                    G.opponent_deck.config.card_limit = G.opponent_deck.config.card_limit + 1
+                    table.insert(G.opponent_playing_cards, _card)
+                    G.opponent_hand:emplace(_card)
+                    _card:start_materialize(nil, _first_dissolve)
+                    _first_dissolve = true
+                    new_cards[#new_cards+1] = _card
+                end
+                opponent_playing_card_joker_effects(new_cards)
+                return true
+            end
+        })) 
+    end
+    if self.ability.name == 'Sigil' or self.ability.name == 'Ouija' then
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            play_sound('tarot1')
+            used_tarot:juice_up(0.3, 0.5)
+            return true end }))
+        for i=1, #G.opponent_hand.cards do
+            local percent = 1.15 - (i-0.999)/(#G.opponent_hand.cards-0.998)*0.3
+            G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.15,func = function() G.opponent_hand.cards[i]:flip();play_sound('card1', percent);G.opponent_hand.cards[i]:juice_up(0.3, 0.3);return true end }))
+        end
+        delay(0.2)
+        if self.ability.name == 'Sigil' then
+            local _suit = pseudorandom_element({'S','H','D','C'}, opponent_pseudoseed('sigil'))
+            for i=1, #G.opponent_hand.cards do
+                G.E_MANAGER:add_event(Event({func = function()
+                    local card = G.opponent_hand.cards[i]
+                    local suit_prefix = _suit..'_'
+                    local rank_suffix = card.base.id < 10 and tostring(card.base.id) or
+                                        card.base.id == 10 and 'T' or card.base.id == 11 and 'J' or
+                                        card.base.id == 12 and 'Q' or card.base.id == 13 and 'K' or
+                                        card.base.id == 14 and 'A'
+                    card:set_base(G.P_CARDS[suit_prefix..rank_suffix])
+                return true end }))
+            end  
+        end
+        if self.ability.name == 'Ouija' then
+            local _rank = pseudorandom_element({'2','3','4','5','6','7','8','9','T','J','Q','K','A'}, opponent_pseudoseed('ouija'))
+            for i=1, #G.opponent_hand.cards do
+                G.E_MANAGER:add_event(Event({func = function()
+                    local card = G.opponent_hand.cards[i]
+                    local suit_prefix = string.sub(card.base.suit, 1, 1)..'_'
+                    local rank_suffix =_rank
+                    card:set_base(G.P_CARDS[suit_prefix..rank_suffix])
+                return true end }))
+            end  
+            G.opponent_hand:opponent_change_size(-1)
+        end
+        for i=1, #G.opponent_hand.cards do
+            local percent = 0.85 + (i-0.999)/(#G.opponent_hand.cards-0.998)*0.3
+            G.E_MANAGER:add_event(Event({trigger = 'after',delay = 0.15,func = function() G.opponent_hand.cards[i]:flip();play_sound('tarot2', percent, 0.6);G.opponent_hand.cards[i]:juice_up(0.3, 0.3);return true end }))
+        end
+        delay(0.5)
+    end
+    if self.ability.consumeable.hand_type then
+        opponent_update_hand_text({sound = 'button', volume = 0.7, pitch = 0.8, delay = 0.3}, {handname=localize(self.ability.consumeable.hand_type, 'poker_hands'),chips = G.GAME.opponent_hands[self.ability.consumeable.hand_type].chips, mult = G.GAME.opponent_hands[self.ability.consumeable.hand_type].mult, level=G.GAME.opponent_hands[self.ability.consumeable.hand_type].level})
+        opponent_level_up_hand(used_tarot, self.ability.consumeable.hand_type)
+        opponent_update_hand_text({sound = 'button', volume = 0.7, pitch = 1.1, delay = 0}, {mult = 0, chips = 0, handname = '', level = ''})
+    end
+    if self.ability.consumeable.remove_card then
+        local destroyed_cards = {}
+        if self.ability.name == 'The Hanged Man' then
+            for i=#G.opponent_hand.highlighted, 1, -1 do
+                destroyed_cards[#destroyed_cards+1] = G.opponent_hand.highlighted[i]
+            end
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+                play_sound('tarot1')
+                used_tarot:juice_up(0.3, 0.5)
+                return true end }))
+            G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                delay = 0.2,
+                func = function() 
+                    for i=#G.opponent_hand.highlighted, 1, -1 do
+                        local card = G.opponent_hand.highlighted[i]
+                        if card.ability.name == 'Glass Card' then 
+                            card:shatter()
+                        else
+                            card:start_dissolve(nil, i == #G.opponent_hand.highlighted)
+                        end
+                    end
+                    return true end }))
+        elseif self.ability.name == 'Familiar' or self.ability.name == 'Grim' or self.ability.name == 'Incantation' then
+            destroyed_cards[#destroyed_cards+1] = pseudorandom_element(G.opponent_hand.cards, opponent_pseudoseed('random_destroy'))
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+                play_sound('tarot1')
+                used_tarot:juice_up(0.3, 0.5)
+                return true end }))
+            G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                delay = 0.1,
+                func = function() 
+                    for i=#destroyed_cards, 1, -1 do
+                        local card = destroyed_cards[i]
+                        if card.ability.name == 'Glass Card' then 
+                            card:shatter()
+                        else
+                            card:start_dissolve(nil, i ~= #destroyed_cards)
+                        end
+                    end
+                    return true end }))
+            G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                delay = 0.7,
+                func = function() 
+                    local cards = {}
+                    for i=1, self.ability.extra do
+                        cards[i] = true
+                        local _suit, _rank = nil, nil
+                        if self.ability.name == 'Familiar' then
+                            _rank = pseudorandom_element({'J', 'Q', 'K'}, opponent_pseudoseed('familiar_create'))
+                            _suit = pseudorandom_element({'S','H','D','C'}, opponent_pseudoseed('familiar_create'))
+                        elseif self.ability.name == 'Grim' then
+                            _rank = 'A'
+                            _suit = pseudorandom_element({'S','H','D','C'}, opponent_pseudoseed('grim_create'))
+                        elseif self.ability.name == 'Incantation' then
+                            _rank = pseudorandom_element({'2', '3', '4', '5', '6', '7', '8', '9', 'T'}, opponent_pseudoseed('incantation_create'))
+                            _suit = pseudorandom_element({'S','H','D','C'}, opponent_pseudoseed('incantation_create'))
+                        end
+                        _suit = _suit or 'S'; _rank = _rank or 'A'
+                        local cen_pool = {}
+                        for k, v in pairs(G.P_CENTER_POOLS["Enhanced"]) do
+                            if v.key ~= 'm_stone' then 
+                                cen_pool[#cen_pool+1] = v
+                            end
+                        end
+                        opponent_create_playing_card({front = G.P_CARDS[_suit..'_'.._rank], center = pseudorandom_element(cen_pool, opponent_pseudoseed('spe_card'))}, G.opponent_hand, nil, i ~= 1, {G.C.SECONDARY_SET.Spectral})
+                    end
+                    opponent_playing_card_joker_effects(cards)
+                    return true end }))
+        elseif self.ability.name == 'Immolate' then
+            local temp_hand = {}
+            for k, v in ipairs(G.opponent_hand.cards) do temp_hand[#temp_hand+1] = v end
+            table.sort(temp_hand, function (a, b) return not a.playing_card or not b.playing_card or a.playing_card < b.playing_card end)
+            pseudoshuffle(temp_hand, opponent_pseudoseed('immolate'))
+
+            for i = 1, self.ability.extra.destroy do destroyed_cards[#destroyed_cards+1] = temp_hand[i] end
+
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+                play_sound('tarot1')
+                used_tarot:juice_up(0.3, 0.5)
+                return true end }))
+            G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                delay = 0.1,
+                func = function() 
+                    for i=#destroyed_cards, 1, -1 do
+                        local card = destroyed_cards[i]
+                        if card.ability.name == 'Glass Card' then 
+                            card:shatter()
+                        else
+                            card:start_dissolve(nil, i == #destroyed_cards)
+                        end
+                    end
+                    return true end }))
+            delay(0.5)
+            opponent_ease_dollars(self.ability.extra.dollars)
+        end
+        delay(0.3)
+        for i = 1, #G.opponent_jokers.cards do
+            G.opponent_jokers.cards[i]:calculate_joker({remove_playing_cards = true, removed = destroyed_cards})
+        end
+    end
+    if self.ability.name == 'The Fool' then
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            if G.opponent_consumeables.config.card_limit > #G.opponent_consumeables.cards then
+                play_sound('timpani')
+                local card = create_card('Tarot_Planet', G.opponent_consumeables, nil, nil, nil, nil, G.GAME.opponent_last_tarot_planet, 'fool',true)
+                card:opponent_add_to_deck()
+                G.opponent_consumeables:emplace(card)
+                used_tarot:juice_up(0.3, 0.5)
+            end
+            return true end }))
+        delay(0.6)
+    end
+    if self.ability.name == 'The Hermit' then
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            play_sound('timpani')
+            used_tarot:juice_up(0.3, 0.5)
+            opponent_ease_dollars(math.max(0,math.min(G.GAME.opponent_dollars, self.ability.extra)), true)
+            return true end }))
+        delay(0.6)
+    end
+    if self.ability.name == 'Temperance' then
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            play_sound('timpani')
+            used_tarot:juice_up(0.3, 0.5)
+            opponent_ease_dollars(self.ability.money, true)
+            return true end }))
+        delay(0.6)
+    end
+    if self.ability.name == 'The Emperor' or self.ability.name == 'The High Priestess' then
+        for i = 1, math.min((self.ability.consumeable.tarots or self.ability.consumeable.planets), G.opponent_consumeables.config.card_limit - #G.opponent_consumeables.cards) do
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+                if G.opponent_consumeables.config.card_limit > #G.opponent_consumeables.cards then
+                    play_sound('timpani')
+                    local card = create_card((self.ability.name == 'The Emperor' and 'Tarot') or (self.ability.name == 'The High Priestess' and 'Planet'), G.opponent_consumeables, nil, nil, nil, nil, nil, (self.ability.name == 'The Emperor' and 'emp') or (self.ability.name == 'The High Priestess' and 'pri'), true)
+                    card:opponent_add_to_deck()
+                    G.opponent_consumeables:emplace(card)
+                    used_tarot:juice_up(0.3, 0.5)
+                end
+                return true end }))
+        end
+        delay(0.6)
+    end
+    if self.ability.name == 'Judgement' or self.ability.name == 'The Soul' then
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            play_sound('timpani')
+            local card = create_card('Joker', G.opponent_jokers, self.ability.name == 'The Soul', nil, nil, nil, nil, self.ability.name == 'Judgement' and 'jud' or 'sou', true)
+            card:opponent_add_to_deck()
+            G.opponent_jokers:emplace(card)
+            if self.ability.name == 'The Soul' then check_for_unlock{type = 'spawn_legendary'} end
+            used_tarot:juice_up(0.3, 0.5)
+            return true end }))
+        delay(0.6)
+    end
+    if self.ability.name == 'Ankh' then 
+        --Need to check for edgecases - if there are max Jokers and all are eternal OR there is a max of 1 joker this isn't possible already
+        --If there are max Jokers and exactly 1 is not eternal, that joker cannot be the one selected
+        --otherwise, the selected joker can be totally random and all other non-eternal jokers can be removed
+        local deletable_jokers = {}
+        for k, v in pairs(G.opponent_jokers.cards) do
+            if not v.ability.eternal then deletable_jokers[#deletable_jokers + 1] = v end
+        end
+        local chosen_joker = pseudorandom_element(G.opponent_jokers.cards, opponent_pseudoseed('ankh_choice'))
+        local _first_dissolve = nil
+        G.E_MANAGER:add_event(Event({trigger = 'before', delay = 0.75, func = function()
+            for k, v in pairs(deletable_jokers) do
+                if v ~= chosen_joker then 
+                    v:start_dissolve(nil, _first_dissolve)
+                    _first_dissolve = true
+                end
+            end
+            return true end }))
+        G.E_MANAGER:add_event(Event({trigger = 'before', delay = 0.4, func = function()
+            local card = copy_card(chosen_joker, nil, nil, nil, chosen_joker.edition and chosen_joker.edition.negative)
+            card:start_materialize()
+            card:opponent_add_to_deck()
+            if card.edition and card.edition.negative then
+                card:set_edition(nil, true)
+            end
+            G.opponent_jokers:emplace(card)
+            return true end }))
+    end
+    if self.ability.name == 'Wraith' then
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+            play_sound('timpani')
+            local card = create_card('Joker', G.opponent_jokers, nil, 0.99, nil, nil, nil, 'wra', true)
+            card:opponent_add_to_deck()
+            G.opponent_jokers:emplace(card)
+            used_tarot:juice_up(0.3, 0.5)
+            if G.GAME.opponent_dollars ~= 0 then
+                opponent_ease_dollars(-G.GAME.opponent_dollars, true)
+            end
+            return true end }))
+        delay(0.6)
+    end
+    if self.ability.name == 'The Wheel of Fortune' or self.ability.name == 'Ectoplasm' or self.ability.name == 'Hex' then
+        local temp_pool =   (self.ability.name == 'The Wheel of Fortune' and self:get_eligible_strength()) or 
+                            ((self.ability.name == 'Ectoplasm' or self.ability.name == 'Hex') and self.eligible_editionless_jokers) or {}
+
+        if self.ability.name == 'Ectoplasm' or self.ability.name == 'Hex' or pseudorandom('wheel_of_fortune',nil,nil,true) < G.GAME.opponent_probabilities.normal/self.ability.extra then 
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+                local over = false
+                local eligible_card = pseudorandom_element(temp_pool, opponent_pseudoseed(
+                    (self.ability.name == 'The Wheel of Fortune' and 'wheel_of_fortune') or 
+                    (self.ability.name == 'Ectoplasm' and 'ectoplasm') or
+                    (self.ability.name == 'Hex' and 'hex')
+                ))
+                local edition = nil
+                if self.ability.name == 'Ectoplasm' then
+                    edition = {negative = true}
+                elseif self.ability.name == 'Hex' then
+                    edition = {polychrome = true}
+                elseif self.ability.name == 'The Wheel of Fortune' then
+                    edition = poll_edition('wheel_of_fortune', nil, true, true,true)
+                end
+                eligible_card:set_edition(edition, true)
+                if self.ability.name == 'The Wheel of Fortune' or self.ability.name == 'Ectoplasm' or self.ability.name == 'Hex' then check_for_unlock({type = 'have_edition'}) end
+                if self.ability.name == 'Hex' then 
+                    local _first_dissolve = nil
+                    for k, v in pairs(G.opponent_jokers.cards) do
+                        if v ~= eligible_card and (not v.ability.eternal) then v:start_dissolve(nil, _first_dissolve);_first_dissolve = true end
+                    end
+                end
+                if self.ability.name == 'Ectoplasm' then 
+                    G.GAME.ecto_minus = G.GAME.ecto_minus or 1
+                    G.opponent_hand:opponent_change_size(-G.GAME.ecto_minus)
+                    G.GAME.ecto_minus = G.GAME.ecto_minus + 1
+                end
+                used_tarot:juice_up(0.3, 0.5)
+            return true end }))
+        else
+            G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+                attention_text({
+                    text = localize('k_nope_ex'),
+                    scale = 1.3, 
+                    hold = 1.4,
+                    major = used_tarot,
+                    backdrop_colour = G.C.SECONDARY_SET.Tarot,
+                    align = (G.STATE == G.STATES.TAROT_PACK or G.STATE == G.STATES.SPECTRAL_PACK) and 'tm' or 'cm',
+                    offset = {x = 0, y = (G.STATE == G.STATES.TAROT_PACK or G.STATE == G.STATES.SPECTRAL_PACK) and -0.2 or 0},
+                    silent = true
+                    })
+                    G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.06*G.SETTINGS.GAMESPEED, blockable = false, blocking = false, func = function()
+                        play_sound('tarot2', 0.76, 0.4);return true end}))
+                    play_sound('tarot2', 1, 0.4)
+                    used_tarot:juice_up(0.3, 0.5)
+            return true end }))
+        end
+        delay(0.6)
+    end
+end
+
+function Card:opponent_update(dt)
+    if self.flipping == 'f2b' then
+        if self.sprite_facing == 'front' or true then
+            if self.VT.w <= 0 then
+                self.sprite_facing = 'back'
+                self.pinch.x =false
+            end
+        end
+    end
+    if self.flipping == 'b2f' then
+        if self.sprite_facing == 'back' or true then
+            if self.VT.w <= 0 then
+                self.sprite_facing = 'front'
+                self.pinch.x =false
+            end
+        end
+    end
+
+    if not self.states.focus.is and self.children.focused_ui then
+        self.children.focused_ui:remove()
+        self.children.focused_ui = nil
+    end
+
+    self:update_alert()
+    if self.ability.set == 'Joker' and not self.sticker_run then 
+        self.sticker_run = get_joker_win_sticker(self.config.center) or 'NONE'
+    end
+
+    if self.ability.consumeable and self.ability.consumeable.max_highlighted then
+        self.ability.consumeable.mod_num = math.min(5, self.ability.consumeable.max_highlighted)
+    end
+    if G.STAGE == G.STAGES.RUN then
+        if self.ability and self.ability.perma_debuff then self.debuff = true end
+
+        if self.area and ((self.area == G.opponent_jokers) or (self.area == G.opponent_consumeables)) then
+            self.bypass_lock = true
+            self.bypass_discovery_center = true
+            self.bypass_discovery_ui = true
+        end
+        self.sell_cost_label = self.facing == 'back' and '?' or self.sell_cost
+
+        if self.ability.name == 'Temperance' then
+            self.ability.money = 0
+            for i = 1, #G.opponent_jokers.cards do
+                if G.opponent_jokers.cards[i].ability.set == 'Joker' then
+                    self.ability.money = self.ability.money + G.opponent_jokers.cards[i].sell_cost
+                end
+            end
+            self.ability.money = math.min(self.ability.money, self.ability.extra)
+        end
+        if self.ability.name == 'Throwback' then
+            self.ability.x_mult = 1 + G.GAME.skips*self.ability.extra
+        end
+        if self.ability.name == "Driver's License" then 
+            self.ability.driver_tally = 0
+            for k, v in pairs(G.opponent_playing_cards) do
+                if v.config.center and (v.config.center.name ~= "Default Base") then self.ability.driver_tally = self.ability.driver_tally+1 end
+            end
+        end
+        if self.ability.name == "Steel Joker" then 
+            self.ability.steel_tally = 0
+            for k, v in pairs(G.opponent_playing_cards) do
+                if v.config.center and (v.config.center.name == "Steel Card") then self.ability.steel_tally = self.ability.steel_tally+1 end
+            end
+        end
+        if self.ability.name == "Cloud 9" then 
+            self.ability.nine_tally = 0
+            for k, v in pairs(G.opponent_playing_cards) do
+                if v:get_id() == 9 then self.ability.nine_tally = self.ability.nine_tally+1 end
+            end
+        end
+        if self.ability.name == "Stone Joker" then 
+            self.ability.stone_tally = 0
+            for k, v in pairs(G.opponent_playing_cards) do
+                if v.config.center and (v.config.center.name == "Stone Card") then self.ability.stone_tally = self.ability.stone_tally+1 end
+            end
+        end
+        if self.ability.name == "Joker Stencil" then 
+            self.ability.x_mult = (G.opponent_jokers.config.card_limit - #G.opponent_jokers.cards)
+            for i = 1, #G.opponent_jokers.cards do
+                if G.opponent_jokers.cards[i].ability.name == 'Joker Stencil' then self.ability.x_mult = self.ability.x_mult + 1 end
+            end
+        end
+        if self.ability.name == 'The Wheel of Fortune' then
+            self.eligible_strength_jokers = EMPTY(self.eligible_strength_jokers)
+            for k, v in pairs(G.opponent_jokers.cards) do
+                if v.ability.set == 'Joker' and (not v.edition) then
+                    table.insert(self.eligible_strength_jokers, v)
+                end
+            end
+        end
+        if self.ability.name == 'Ectoplasm' or self.ability.name == 'Hex' then
+            self.eligible_editionless_jokers = EMPTY(self.eligible_editionless_jokers)
+            for k, v in pairs(G.opponent_jokers.cards) do
+                if v.ability.set == 'Joker' and (not v.edition) then
+                    table.insert(self.eligible_editionless_jokers, v)
+                end
+            end
+        end
+        if self.ability.name == 'Blueprint' or self.ability.name == 'Brainstorm' then
+            local other_joker = nil
+            if self.ability.name == 'Brainstorm' then
+                other_joker = G.opponent_jokers.cards[1]
+            elseif self.ability.name == 'Blueprint' then
+                for i = 1, #G.opponent_jokers.cards do
+                    if G.opponent_jokers.cards[i] == self then other_joker = G.opponent_jokers.cards[i+1] end
+                end
+            end
+            if other_joker and other_joker ~= self and other_joker.config.center.blueprint_compat then
+                self.ability.blueprint_compat = 'compatible'
+            else
+                self.ability.blueprint_compat = 'incompatible'
+            end
+        end
+        if self.ability.name == 'Swashbuckler' then
+            local sell_cost = 0
+            for i = 1, #G.opponent_jokers.cards do
+                if G.opponent_jokers.cards[i] ~= self and (G.opponent_jokers.cards[i].area and G.opponent_jokers.cards[i].area == G.opponent_jokers) then
+                    sell_cost = sell_cost + G.opponent_jokers.cards[i].sell_cost
+                end
+            end
+            self.ability.mult = sell_cost
+        end
+    else
+        if self.ability.name == 'Temperance' then
+            self.ability.money = 0
+        end
+    end
+end
+
+function Card:opponent_redeem()
+    if self.ability.set == "Voucher" then
+        stop_use()
+        if not self.config.center.discovered then
+            discover_card(self.config.center)
+        end
+        if self.shop_voucher then G.GAME.opponent_current_round.voucher = nil end 
+
+        self.states.hover.can = false
+        G.GAME.opponent_used_vouchers[self.config.center_key] = true
+        local top_dynatext = nil
+        local bot_dynatext = nil
+        
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
+                top_dynatext = DynaText({string = localize{type = 'name_text', set = self.config.center.set, key = self.config.center.key}, colours = {G.C.WHITE}, rotate = 1,shadow = true, bump = true,float=true, scale = 0.9, pop_in = 0.6/G.SPEEDFACTOR, pop_in_rate = 1.5*G.SPEEDFACTOR})
+                bot_dynatext = DynaText({string = localize('k_redeemed_ex'), colours = {G.C.WHITE}, rotate = 2,shadow = true, bump = true,float=true, scale = 0.9, pop_in = 1.4/G.SPEEDFACTOR, pop_in_rate = 1.5*G.SPEEDFACTOR, pitch_shift = 0.25})
+                self:juice_up(0.3, 0.5)
+                play_sound('card1')
+                play_sound('coin1')
+                self.children.top_disp = UIBox{
+                    definition =    {n=G.UIT.ROOT, config = {align = 'tm', r = 0.15, colour = G.C.CLEAR, padding = 0.15}, nodes={
+                                        {n=G.UIT.O, config={object = top_dynatext}}
+                                    }},
+                    config = {align="tm", offset = {x=0,y=0},parent = self}
+                }
+                self.children.bot_disp = UIBox{
+                        definition =    {n=G.UIT.ROOT, config = {align = 'tm', r = 0.15, colour = G.C.CLEAR, padding = 0.15}, nodes={
+                                            {n=G.UIT.O, config={object = bot_dynatext}}
+                                        }},
+                        config = {align="bm", offset = {x=0,y=0},parent = self}
+                    }
+            return true end }))
+        opponent_ease_dollars(-self.cost)
+        --inc_career_stat('c_shop_dollars_spent', self.cost)
+        --inc_career_stat('c_vouchers_bought', 1)
+        --set_voucher_usage(self)
+        --check_for_unlock({type = 'run_redeem'})
+        G.GAME.opponent_current_round.voucher = nil
+
+        self:opponent_apply_to_run()
+
+        delay(0.6)
+        for i = 1, #G.opponent_jokers.cards do
+            G.opponent_jokers.cards[i]:opponent_calculate_joker({buying_card = true, card = self})
+        end
+        if G.GAME.modifiers.inflation then 
+            G.GAME.inflation = G.GAME.inflation + 1
+            G.E_MANAGER:add_event(Event({func = function()
+              for k, v in pairs(G.I.CARD) do
+                  if v.set_cost then v:set_cost() end
+              end
+              return true end }))
+        end
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 2.6, func = function()
+            top_dynatext:pop_out(4)
+            bot_dynatext:pop_out(4)
+            return true end }))
+        
+        G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.5, func = function()
+            self.children.top_disp:remove()
+            self.children.top_disp = nil
+            self.children.bot_disp:remove()
+            self.children.bot_disp = nil
+        return true end }))
+    end
+end
+
+function Card:opponent_apply_to_run(center)
+    local center_table = {
+        name = center and center.name or self and self.ability.name,
+        extra = center and center.config.extra or self and self.ability.extra
+    }
+    -- We doesn't care for all voucher
+
+    if center_table.name == 'Hone' or center_table.name == 'Glow Up' then
+        G.E_MANAGER:add_event(Event({func = function()
+            G.GAME.opponent_edition_rate = center_table.extra
+            return true end }))
+    end
+
+    if center_table.name == 'Crystal Ball' then
+        G.E_MANAGER:add_event(Event({func = function()
+            G.opponent_consumeables.config.card_limit = G.opponent_consumeables.config.card_limit + 1
+            return true end }))
+    end
+
+    if center_table.name == 'Grabber' or center_table.name == 'Nacho Tong' then
+        G.GAME.opponent_round_resets.hands = G.GAME.opponent_round_resets.hands + center_table.extra
+        opponent_ease_hands_played(center_table.extra)
+    end
+
+    if center_table.name == 'Wasteful' or center_table.name == 'Recyclomancy' then
+        G.GAME.opponent_round_resets.discards = G.GAME.opponent_round_resets.discards + center_table.extra
+        opponent_ease_discard(center_table.extra)
+    end
+
+    if center_table.name == 'Antimatter' then
+        G.E_MANAGER:add_event(Event({func = function()
+            if G.opponent_jokers then 
+                G.opponent_jokers.config.card_limit = G.opponent_jokers.config.card_limit + 1
+            end
+            
+            return true 
+            end 
+        }))
+    end
+
+    if center_table.name == 'Paint Brush' or center_table.name == 'Palette' then
+        G.opponent_hand:change_size(1)
+    end
+end
+'''
+match_indent = true
+times = 1
+
+# Use opponent version if the card being updated is in the opponent's area
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''function Card:update(dt)'''
+position = "after"
+payload = '''
+    if self.params.is_opponent then
+        self:opponent_update(dt)
+        return
+    end
+'''
+match_indent = true
+times = 1
+
+# Use opponent version if the card being updated is an opponent's card
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''function Card:redeem()'''
+position = "after"
+payload = '''
+    if self.is_opponent then
+        self:opponent_redeem()
+        return
+    end
+'''
+match_indent = true
+times = 1
+
+# Add a flag for opponent selling card + send network event if not opponent
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''function Card:sell_card()'''
+position = "at"
+payload = '''
+function Card:sell_card(is_opponent)
+    if not is_opponent then
+        on_sell_card(self)
+    end
+'''
+match_indent = true
+times = 1
+
+# use the above flag to bypass the focus
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''G.CONTROLLER:save_cardarea_focus(area == G.jokers and 'jokers' or 'consumeables')'''
+position = "at"
+payload = '''
+if not is_opponent then
+    G.CONTROLLER:save_cardarea_focus(area == G.jokers and 'jokers' or 'consumeables')
+end
+'''
+match_indent = true
+times = 1
+
+# use the above flag to use the appropriate joker calculation effect
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''self:calculate_joker{selling_self = true}'''
+position = "at"
+payload = '''
+if is_opponent then
+    self:opponent_calculate_joker{selling_self = true}
+else 
+    self:calculate_joker{selling_self = true}
+end
+'''
+match_indent = true
+times = 1
+
+
+# use the above flag to use the appropriate dollars update
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''ease_dollars(self.sell_cost)'''
+position = "at"
+payload = '''
+if is_opponent then
+    opponent_ease_dollars(self.sell_cost)
+else 
+    ease_dollars(self.sell_cost)
+end
+'''
+match_indent = true
+times = 1
+
+# use the above flag to bypass the recall
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''G.CONTROLLER:recall_cardarea_focus(area == G.jokers and 'jokers' or 'consumeables')'''
+position = "at"
+payload = '''
+if not is_opponent then
+    G.CONTROLLER:recall_cardarea_focus(area == G.jokers and 'jokers' or 'consumeables')
+end
+'''
+match_indent = true
+times = 1
+
+
+# is_face should use the appropriate find_joker for the opponent card
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''local id = self:get_id()'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if self.area == G.opponent_play then
+        if id == 11 or id == 12 or id == 13 or next(opponent_find_joker("Pareidolia")) then
+            return true
+        end
+    end
+end
+'''
+match_indent = true
+times = 1
+
+# In generate_UIBox_ability_table, we now deal with opponent jokers
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''elseif self.ability.name == 'Abstract Joker' then loc_vars = {self.ability.extra, (G.jokers and G.jokers.cards and #G.jokers.cards or 0)*self.ability.extra}'''
+position = "at"
+payload = '''
+elseif self.ability.name == 'Abstract Joker' then 
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra, (G.opponent_jokers and G.opponent_jokers.cards and #G.opponent_jokers.cards or 0)*self.ability.extra}
+    else
+        loc_vars = {self.ability.extra, (G.jokers and G.jokers.cards and #G.jokers.cards or 0)*self.ability.extra}
+    end
+elseif self.ability.name == 'Erosion' then
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra, math.max(0,self.ability.extra*(G.opponent_playing_cards and (G.GAME.starting_deck_size - #G.opponent_playing_cards) or 0)), G.GAME.starting_deck_size}
+    else
+        loc_vars = {self.ability.extra, math.max(0,self.ability.extra*(G.playing_cards and (G.GAME.starting_deck_size - #G.playing_cards) or 0)), G.GAME.starting_deck_size}
+    end
+elseif self.ability.name == 'Mail-In Rebate' then
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra, localize(G.GAME.opponent_current_round.mail_card.rank, 'ranks')}
+    else
+        loc_vars = {self.ability.extra, localize(G.GAME.current_round.mail_card.rank, 'ranks')}
+    end
+elseif self.ability.name == 'Bull' then 
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra, self.ability.extra*math.max(0,G.GAME.opponent_dollars) or 0}
+    else
+        loc_vars = {self.ability.extra, self.ability.extra*math.max(0,G.GAME.dollars) or 0}
+    end
+elseif self.ability.name == 'Bootstraps' then 
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra.mult, self.ability.extra.dollars, self.ability.extra.mult*math.floor((G.GAME.opponent_dollars + (G.GAME.dollar_buffer or 0))/self.ability.extra.dollars)}
+    else
+        loc_vars = {self.ability.extra.mult, self.ability.extra.dollars, self.ability.extra.mult*math.floor((G.GAME.dollars + (G.GAME.dollar_buffer or 0))/self.ability.extra.dollars)}
+    end
+
+'''
+match_indent = true
+times = 1
+
+
+# set_ability : For opponent "to do list", use the appropriate pseudoseed and hands
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''local _poker_hands = {}
+        for k, v in pairs(G.GAME.hands) do
+            if v.visible then _poker_hands[#_poker_hands+1] = k end
+        end
+        local old_hand = self.ability.to_do_poker_hand
+        self.ability.to_do_poker_hand = nil
+
+        while not self.ability.to_do_poker_hand do
+            self.ability.to_do_poker_hand = pseudorandom_element(_poker_hands, pseudoseed((self.area and self.area.config.type == 'title') and 'false_to_do' or 'to_do'))
+            if self.ability.to_do_poker_hand == old_hand then self.ability.to_do_poker_hand = nil end
+        end'''
+position = "at"
+payload = '''
+if self.params.is_opponent then
+        local _poker_hands = {}
+        for k, v in pairs(G.GAME.opponent_hands) do
+            if v.visible then _poker_hands[#_poker_hands+1] = k end
+        end
+        local old_hand = self.ability.to_do_poker_hand
+        self.ability.to_do_poker_hand = nil
+
+        while not self.ability.to_do_poker_hand do
+            self.ability.to_do_poker_hand = pseudorandom_element(_poker_hands, opponent_pseudoseed((self.area and self.area.config.type == 'title') and 'false_to_do' or 'to_do'))
+            if self.ability.to_do_poker_hand == old_hand then self.ability.to_do_poker_hand = nil end
+        end
+else
+        local _poker_hands = {}
+        for k, v in pairs(G.GAME.hands) do
+            if v.visible then _poker_hands[#_poker_hands+1] = k end
+        end
+        local old_hand = self.ability.to_do_poker_hand
+        self.ability.to_do_poker_hand = nil
+
+        while not self.ability.to_do_poker_hand do
+            self.ability.to_do_poker_hand = pseudorandom_element(_poker_hands, pseudoseed((self.area and self.area.config.type == 'title') and 'false_to_do' or 'to_do'))
+            if self.ability.to_do_poker_hand == old_hand then self.ability.to_do_poker_hand = nil end
+        end
+end
+'''
+match_indent = true
+times = 1
+
+# Remove : Add cleanup delegate on remove if it's an online card
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''Moveable.remove(self)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_online_card(self.ability.name) then
+    BALATRO_VS_CTX.interaction_context:cleanup_action(self.balatro_vs_center_id, self.ability.name)
+end
+'''
+match_indent = true
+times = 1
+
+# Remove : use the appropriate remove_from_deck for opponent cards
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''self:remove_from_deck()'''
+position = "at"
+payload = '''
+if self.params.is_opponent then
+    self:opponent_remove_from_deck()
+else
+    self:remove_from_deck()
+end
+'''
+match_indent = true
+times = 1
+
+# Remove : remove in the opponent's playing cards and opponent used jokers
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''if G.playing_cards then'''
+position = "before"
+payload = '''
+
+    if not G.OVERLAY_MENU and self.params.is_opponent then
+        for k, v in pairs(G.P_CENTERS) do
+            if v.name == self.ability.name then
+                if not next(opponent_find_joker(self.ability.name, true)) then 
+                    G.GAME.opponent_used_jokers[k] = nil
+                end
+            end
+        end
+    end
+
+    if G.opponent_playing_cards then
+        for k, v in ipairs(G.opponent_playing_cards) do
+            if v == self then
+                table.remove(G.opponent_playing_cards, k)
+                break
+            end
+        end
+        for k, v in ipairs(G.opponent_playing_cards) do
+            v.playing_card = k
+        end
+    end
+
+'''
+match_indent = true
+times = 1
+
+# calculate_joker: changing Campfire joker behavior to reset every 3rd round
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''if self.ability.name == 'Campfire' and G.GAME.blind.boss and self.ability.x_mult > 1 then'''
+position = "at"
+payload = '''
+if self.ability.name == 'Campfire' and G.GAME.blind.boss and self.ability.x_mult > 1 or
+    BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and BALATRO_VS_CTX.rounds_played % 3 == 0
+    then
+'''
+match_indent = true
+times = 1
+
+#generate_UIBox_ability_table : Add warnings text
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end)'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if lume.any({
+                'Campfire',
+                'Mr. Bones',
+                'Throwback',
+                'Matador',
+                'Chicot',
+                'Hieroglyph',
+                'Petroglyph',
+                'Diet Cola'
+            }, function(ability_name) return self.ability.name == ability_name end) 
+            and not is_online_card_and_present('Jester') -- Don't show warning if Jester is present
+            then
+        local warnings = {
+            Campfire = 'b_versus_campfire_warning',
+            ['Mr. Bones'] = 'b_versus_mr_bones_warning',
+            Throwback = 'b_versus_throwback_warning',
+            Matador = 'b_versus_matador_warning',
+            Chicot = 'b_versus_chicot_warning',
+            Hieroglyph = 'b_versus_hieroglyph_warning',
+            Petroglyph = 'b_versus_petroglyph_warning',
+            ["Director's Cut"] = 'b_versus_directors_cut_warning',
+            Retcon = 'b_versus_retcon_warning',
+            ['Diet Cola'] = 'b_versus_diet_cola_warning'
+        }
+        local text = localize(warnings[self.ability.name] or '')
+        main_end = {
+            {
+                n = G.UIT.C,
+                config = { align = "bm", minh = 0.4 },
+                nodes = {
+                    {
+                        n = G.UIT.C,
+                        config = { ref_table = self, align = "m", colour = G.C.RED, r = 0.05, padding = 0.06, func = 'blueprint_compat' },
+                        nodes = {
+                            { n = G.UIT.T, config = { text = text, scale = 0.5, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                        }
+                    }
+                }
+            }
+        }
+    elseif is_online_card(self.ability.name) and self.config.center.description then
+                    local main_start_text = self.config.center.description.main
+                    local main_end_text = self.config.center.description.sub
+                    main_start = {
+                        {
+                            n = G.UIT.C,
+                            config = { align = "tm", minh = 0.4 },
+                            nodes = {
+                                {
+                                    n = G.UIT.C,
+                                    config = { ref_table = self, align = "m", r = 0.05, padding = 0.06 },
+                                    nodes = {
+                                        { n = G.UIT.T, config = { text = main_start_text, scale = 0.4, colour = G.C.UI.TEXT_DARK } },
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if main_end_text ~= '' then
+                        if self.config.center.key == 'j_online_countdown' then
+                            local parts = {}
+                            for part in main_end_text:gmatch("([^,]+)") do
+                                table.insert(parts, part:match("^%s*(.-)%s*$")) -- Trim whitespace
+                            end
+
+                            main_end = {
+                                {
+                                    n = G.UIT.C,
+                                    config = { align = "bm", minh = 0.4 },
+                                    nodes = {
+                                        {
+                                            n = G.UIT.C,
+                                            config = { ref_table = self, align = "m", r = 0.05, padding = 0.06 },
+                                            nodes = {
+                                                { n = G.UIT.T, config = { text = parts[1], scale = 0.4, colour = G.C.UI.TEXT_DARK } },
+                                                { n = G.UIT.T, config = { text = parts[2], scale = 0.4, colour = G.C.RED } },
+                                                { n = G.UIT.T, config = { text = parts[3], scale = 0.4, colour = G.C.UI.TEXT_DARK } },
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        else
+                        main_end = {
+                                {
+                                    n = G.UIT.C,
+                                    config = { align = "bm", minh = 0.4 },
+                                    nodes = {
+                                        {
+                                            n = G.UIT.C,
+                                            config = { ref_table = self, align = "m", r = 0.05, padding = 0.06 },
+                                            nodes = {
+                                                { n = G.UIT.T, config = { text = main_end_text, scale = 0.4, colour = G.C.UI.TEXT_DARK } },
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        end
+                    end
+    end
+end
+
+'''
+match_indent = true
+
+# generate_UIBox_ability_table : For blueprint, check also opponent joker area
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''main_end = (self.area and self.area == G.jokers) and {'''
+position = "at"
+payload = '''
+main_end = (self.area and self.area == G.jokers or self.area == G.opponent_jokers) and {
+'''
+match_indent = true
+times = 2
+
+# generate_UIBox_ability_table : pass the is_opponent flag to generate_card_ui
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = ''' return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end)'''
+position = "at"
+payload = '''
+return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end, self.area == G.opponent_jokers or self.area == G.opponent_consumeables) -- self.params.is_opponent should work...
+
+'''
+match_indent = true
+times = 1
+
+# is_suit: use the appropriate find_joker for the opponent card
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''if next(find_joker('Smeared Joker')) and (self.base.suit == 'Hearts' or self.base.suit == 'Diamonds') == (suit == 'Hearts' or suit == 'Diamonds') then'''
+position = "before"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if self.area == G.opponent_play then
+        if next(opponent_find_joker('Smeared Joker')) and (self.base.suit == 'Hearts' or self.base.suit == 'Diamonds') == (suit == 'Hearts' or suit == 'Diamonds') then
+            return true
+        end
+    end
+end
+
+'''
+match_indent = true
+times = 2
+
+
+# set_ability: use the appropriate used_jokers for the opponent card
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''G.GAME.used_jokers[k] = true'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and self.params.is_opponent then
+    G.GAME.opponent_used_jokers[k] = true
+else
+    G.GAME.used_jokers[k] = true    
+end
+
+'''
+match_indent = true
+times = 1
+
+# Init: prevet card action (click and drag) for opponent cards
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''self.states.click.can = true'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and self.params.is_opponent then
+    self.states.drag.can = false
+    self.states.click.can = false
+end
+
+'''
+match_indent = true
+times = 1
+
+
+# Init: prevet card action (click and drag) for opponent cards
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''if self.added_to_deck then --Need to override if adding negative to an existing joker
+                if self.ability.consumeable then
+                    G.consumeables.config.card_limit = G.consumeables.config.card_limit + 1
+                else
+                    G.jokers.config.card_limit = G.jokers.config.card_limit + 1
+                end
+            end'''
+position = "at"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and self.params.is_opponent then
+    if self.added_to_deck then --Need to override if adding negative to an existing joker
+                if self.ability.consumeable then
+                    G.opponent_consumeables.config.card_limit = G.opponent_consumeables.config.card_limit + 1
+                else
+                    G.opponent_jokers.config.card_limit = G.opponent_jokers.config.card_limit + 1
+                end
+            end
+else
+    if self.added_to_deck then --Need to override if adding negative to an existing joker
+        if self.ability.consumeable then
+            G.consumeables.config.card_limit = G.consumeables.config.card_limit + 1
+        else
+            G.jokers.config.card_limit = G.jokers.config.card_limit + 1
+        end
+    end
+end
+
+'''
+match_indent = true
+times = 1
+
+#can_use_consumeable: Update to handle online specific cards actions
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''function Card:can_use_consumeable(any_state, skip_check)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_online_card(self.ability.name) then
+    local center = get_online_center_config_by_name_or_key(self.ability.name)
+    return center.can_use_consumeable(self)
+end
+
+'''
+match_indent = true
+times = 1
+
+#init: initilize online funcionalities for online cards
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''self:set_ability(center, true)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_online_card(self.ability.name) then
+    initialize_online_card(self)
+end
+
+'''
+match_indent = true
+times = 1
+
+#calculate_joker: Trigger interaction for online cards for this context
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''function Card:calculate_joker(context)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    BALATRO_VS_CTX.interaction_context:handle_interaction(context,{})
+end
+
+'''
+match_indent = true
+times = 1
+
+#set_card_area: add an online id calculated with how many the same card is in the area
+[[patches]]
+[patches.pattern]
+target = "card.lua"
+pattern = '''function Card:set_card_area(area)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX 
+    and BALATRO_VS_CTX.network.is_live 
+    and lume.any({G.jokers, G.opponent_jokers, G.consumeables, G.opponent_consumeables}, function(v) return v == area end) then
+
+    local max_id = -1
+    for k, v in pairs(G.jokers.cards) do
+        if v.ability.name == self.ability.name and (v.balatro_vs_center_id or -1) > max_id then
+            max_id = v.balatro_vs_center_id or -1
+        end 
+    end
+
+    for k, v in pairs(G.opponent_jokers.cards) do
+        if v.ability.name == self.ability.name and (v.balatro_vs_center_id or -1) > max_id then
+            max_id = v.balatro_vs_center_id or -1
+        end 
+    end
+
+    for k, v in pairs(G.consumeables.cards) do
+        if v.ability.name == self.ability.name and (v.balatro_vs_center_id or -1) > max_id then
+            max_id = v.balatro_vs_center_id or -1
+        end 
+    end
+
+    for k, v in pairs(G.opponent_consumeables.cards) do
+        if v.ability.name == self.ability.name and (v.balatro_vs_center_id or -1) > max_id then
+            max_id = v.balatro_vs_center_id or -1
+        end 
+    end
+
+    local count = max_id + 1
+        
+    self.balatro_vs_center_id = count
+    print('Setting balatro_vs_center_id to ' .. count .. ' for ' .. self.ability.name)
+end
+
+'''
+match_indent = true
+times = 1
