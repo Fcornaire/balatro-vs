@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override-file: core/Cargo.toml
+
+      - name: Update integrity
+        run: |
+          echo '#[cfg(feature = "with_integrity")]
+              pub fn get_integrity_hash() -> String {
+                  "'"${{ secrets.INTEGRITY_HASH }}"'".to_string()
+              }
+          ' > core/src/modules/integrity.rs
+          echo 'Updated with integrity hash!'
+
+      - name: Build
+        working-directory: core
+        run: cargo build --release --features with_integrity
+
+      - name: Archive
+        uses: thedoctor0/zip-release@0.7.1
+        with:
+          type: zip
+          filename: balatro-vs.zip
+          path: ./core/target/release
+          exclusions: '**/.cargo-lock **/.fingerprint **/build **/deps **/incremental **/examples **/winmm.dll.** **/*.pdb'
+
+      - name: Upload Release
+        uses: ncipollo/release-action@v1.12.0
+        with:
+          artifacts: 'balatro-vs.zip'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: true

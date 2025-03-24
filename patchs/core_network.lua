@@ -227,6 +227,7 @@ function on_random_start(seed)
             G.SETTINGS.tutorial_complete = true
             G.FUNCS.network_wait_for_next_action()
             BALATRO_VS_CTX.network.is_live = true
+            backup_progress()
             G.F_NO_SAVING = true
             G.FUNCS.start_run(e, { stake = 1, seed = seed, challenge = nil })
             return true

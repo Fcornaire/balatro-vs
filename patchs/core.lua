@@ -258,6 +258,15 @@ function update_consumeables_alignment(consumeables, dragged_card)
     update_alignment('consumeables', consumeables, dragged_card)
 end
 
+function backup_progress()
+    BALATRO_VS_CTX.progress = {
+        all_unlocked = G.PROFILES[G.SETTINGS.profile].all_unlocked,
+        centers = lume.serialize(G.P_CENTERS),
+        blinds = lume.serialize(G.P_BLINDS),
+        tags = lume.serialize(G.P_TAGS),
+    }
+end
+
 BALATRO_VS_CTX = {
     network = {
         has_confirmed_matchmaking = false,
@@ -279,5 +288,8 @@ BALATRO_VS_CTX = {
     timer = nil,
     is_opponent_first_reroll_shop = true,
     rounds_played = 1,
-    interaction_context = InteractionContext:new()
+    interaction_context = InteractionContext:new(),
+    progress = {
+
+    }
 }

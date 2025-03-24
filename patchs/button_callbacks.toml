@@ -522,6 +522,25 @@ if BALATRO_VS_CTX then
     G.TILE_W = ORIG_RENDER_SCALE.TILE_W
     G.TILE_H = ORIG_RENDER_SCALE.TILE_H
     G.TILESCALE = ORIG_RENDER_SCALE.TILESCALE
+
+    --Also restore the original progress
+    if BALATRO_VS_CTX.progress then
+        if BALATRO_VS_CTX.progress.all_unlocked then
+            G.PROFILES[G.SETTINGS.profile].all_unlocked = BALATRO_VS_CTX.progress.all_unlocked
+        end
+
+        if BALATRO_VS_CTX.progress.centers then
+            G.P_CENTERS = lume.deserialize(BALATRO_VS_CTX.progress.centers)
+        end
+
+        if BALATRO_VS_CTX.progress.blinds then
+            G.P_BLINDS = lume.deserialize(BALATRO_VS_CTX.progress.blinds)
+        end
+
+        if BALATRO_VS_CTX.progress.tags then
+            G.P_TAGS = lume.deserialize(BALATRO_VS_CTX.progress.tags)
+        end
+    end
 end
 '''
 match_indent = true
