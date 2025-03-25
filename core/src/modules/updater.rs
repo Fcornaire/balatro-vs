@@ -128,8 +128,8 @@ impl Updater {
         let extract_path = dirs::download_dir()
             .unwrap_or_else(|| dirs::home_dir().unwrap())
             .join("balatro-vs-update");
-        let main_dll_path = extract_path.join("winmm.dll");
-        let lovely_patch_path = extract_path.join("balatro-vs");
+        let main_dll_path = extract_path.join("release").join("winmm.dll");
+        let lovely_patch_path = extract_path.join("release").join("balatro-vs");
 
         //copy the lovely patch to the mods folder
         let lovely_mod_folder = dirs::data_dir()

@@ -965,23 +965,22 @@ function on_opponent_sell_card(index, is_consumeable)
                     delay = 0.5,
                     func = function()
                         card:sell_card(true)
-                        return true
-                    end
-                }))
 
+                        --Trigger joker calculation after selling
+                        for i = 1, #G.opponent_jokers.cards do
+                            if G.opponent_jokers.cards[i] ~= card then
+                                G.opponent_jokers.cards[i]:opponent_calculate_joker({ selling_card = true, card = card })
+                            end
+                        end
 
-                --Trigger joker calculation after selling
-                for i = 1, #G.opponent_jokers.cards do
-                    if G.opponent_jokers.cards[i] ~= card then
-                        G.opponent_jokers.cards[i]:opponent_calculate_joker({ selling_card = true, card = card })
-                    end
-                end
-
-                G.E_MANAGER:add_event(Event({
-                    trigger = 'after',
-                    delay = 0.5,
-                    func = function()
-                        G.FUNCS.game_manipulation_acknowledge_event() --Acknowledge the end of opponent sell card
+                        G.E_MANAGER:add_event(Event({
+                            trigger = 'after',
+                            delay = 0.5,
+                            func = function()
+                                G.FUNCS.game_manipulation_acknowledge_event() --Acknowledge the end of opponent sell card
+                                return true
+                            end
+                        }))
                         return true
                     end
                 }))
