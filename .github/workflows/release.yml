@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - '*'
+      - "*"
 
 jobs:
   build:
@@ -38,11 +38,11 @@ jobs:
           type: zip
           filename: balatro-vs.zip
           path: ./core/target/release
-          exclusions: '**/.cargo-lock **/.fingerprint **/build **/deps **/incremental **/examples **/winmm.dll.** **/*.pdb'
+          exclusions: "**/.cargo-lock **/.fingerprint **/build **/deps **/incremental **/examples **/winmm.dll.** **/*.pdb **/*.d"
 
       - name: Upload Release
         uses: ncipollo/release-action@v1.12.0
         with:
-          artifacts: 'balatro-vs.zip'
+          artifacts: "balatro-vs.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           generate_release_notes: true
