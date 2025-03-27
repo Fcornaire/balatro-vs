@@ -101,7 +101,7 @@ function initialize_online_cards(game_object)
             config = { max_highlighted = 1 },
             description = {
                 main = "Negate the (futures and on going) effect of a joker for this round",
-                sub = "Click the joker first, then joker to target and finally use this card"
+                sub = "Click this card first, then the target joker and finally use this card"
             },
             can_use_consumeable = function(card)
                 return card and card.ability.targets and #card.ability.targets > 0
@@ -144,7 +144,7 @@ function initialize_online_cards(game_object)
             perishable_compat = true,
             description = {
                 main = "Randomly destroy an opponent joker at the end of the round",
-                sub = "The owner of this card has to pay 10$ at the start of a round to keep this card or destroy it"
+                sub = "The owner of this card has to pay {X} at the start of a round to keep this card or destroy it"
             },
             can_activate_more_than_once_per_chain = true,
             actions = {
@@ -182,22 +182,24 @@ function initialize_online_cards(game_object)
                     end
 
                     if owner.params.is_opponent then
-                        if G.GAME.opponent_dollars >= 10 then
-                            opponent_ease_dollars(-10, true)
+                        if G.GAME.opponent_dollars >= owner.ability.begone_cost then
+                            opponent_ease_dollars(-owner.ability.begone_cost, true)
                             owner:juice_up()
                             play_sound('card1')
                         else
                             owner:start_dissolve()
                         end
                     else
-                        if G.GAME.dollars >= 10 then
-                            ease_dollars(-10, true)
+                        if G.GAME.dollars >= owner.ability.begone_cost then
+                            ease_dollars(-owner.ability.begone_cost, true)
                             owner:juice_up()
                             play_sound('card1')
                         else
                             owner:start_dissolve()
                         end
                     end
+
+                    owner.ability.begone_cost = owner.ability.begone_cost + 5
                 end
 
             },
@@ -299,7 +301,7 @@ function initialize_online_cards(game_object)
             config = { max_highlighted = 1 },
             description = {
                 main = "Turn a joker into an eternal card",
-                sub = ""
+                sub = "Click this card first, then the target joker and finally use this card"
             },
             can_use_consumeable = function(card)
                 return card and card.ability.targets and #card.ability.targets > 0
@@ -651,6 +653,8 @@ function initialize_online_card(card)
     elseif card.config.center.key == "j_online_discard_maestro" then
         local hand_to_update_limit = card.params.is_opponent and G.opponent_hand or G.hand
         hand_to_update_limit.config.highlighted_limit = 100
+    elseif card.config.center.key == "j_online_begone_joker" then
+        card.ability.begone_cost = 15
     end
 end
 

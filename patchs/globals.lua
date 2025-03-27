@@ -86,6 +86,7 @@ G.FUNCS.versus_friendlies_start = function()
         local room = network_start_versus_friendlies()
         if room ~= nil and room ~= '' then
             BALATRO_VS_CTX.network.current_friendly_room_code = room
+            local room_obfuscated = room:gsub('.', '*')
             G.opp_ext_code = ''
             return
             {
@@ -103,7 +104,17 @@ G.FUNCS.versus_friendlies_start = function()
                         n = G.UIT.R,
                         config = { align = "cm", minw = 1.4, padding = 0.5 },
                         nodes = {
-                            { n = G.UIT.T, config = { text = room, scale = 1.0, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                            { n = G.UIT.T, config = { text = room_obfuscated, scale = 1.0, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                            UIBox_button({
+                                text_scale = 1.0,
+                                label = { localize('b_versus_friendlies_copy_code') },
+                                minw = 2,
+                                minh = 1.0,
+                                button = 'copy_code',
+                                colour = G.C.BLUE,
+                                scale = 5,
+                                col = true,
+                            })
                         }
                     },
                     {
@@ -168,6 +179,11 @@ G.FUNCS.versus_friendlies_start = function()
     end
 end
 
+G.FUNCS.copy_code = function()
+    if BALATRO_VS_CTX and BALATRO_VS_CTX.network and BALATRO_VS_CTX.network.current_friendly_room_code then
+        love.system.setClipboardText(BALATRO_VS_CTX.network.current_friendly_room_code)
+    end
+end
 
 
 G.FUNCS.vs_main_menu = function()
