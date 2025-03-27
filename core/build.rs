@@ -1,6 +1,7 @@
 use std::{
     env::var,
     fs::{self, copy, read_dir, ReadDir},
+    path::Path,
 };
 
 fn main() {
@@ -10,12 +11,22 @@ fn main() {
     forward_dll::forward_dll("C:\\Windows\\System32\\winmm.dll").unwrap();
 
     let paths = read_dir("../patchs").unwrap();
+    let profile = var("PROFILE").unwrap_or_else(|_| "debug".to_string());
 
     copy_patches(
         paths,
         "balatro-vs\\lovely".to_string(),
-        format!("target\\{}\\", var("PROFILE").unwrap()),
+        format!("target\\{}\\", profile),
     );
+
+    if profile == "release" {
+        let bvs_config_path =
+            Path::new(&format!("target\\{}\\balatro-vs\\lovely", profile)).join("bvs.json");
+
+        if bvs_config_path.exists() {
+            update_bvs_json(&bvs_config_path, "wss", "live.balatro-vs-matchmaking.eu", 0);
+        }
+    }
 
     if let Some(balatro_game_path) = var("BALATRO_GAME_PATH").ok() {
         copy(
@@ -47,4 +58,22 @@ fn copy_patches(to_copy: ReadDir, target_path: String, target_dir: String) {
 
         fs::copy(path, dest).unwrap();
     }
+}
+
+fn update_bvs_json(path: &Path, protocol: &str, host: &str, port: u16) {
+    let content = fs::read_to_string(path).expect("Failed to read bvs.json");
+
+    // protocol
+    let content = content.replace(
+        r#""protocol": "ws""#,
+        &format!(r#""protocol": "{}""#, protocol),
+    );
+
+    // host
+    let content = content.replace(r#""host": "localhost""#, &format!(r#""host": "{}""#, host));
+
+    // port
+    let content = content.replace(r#""port": 3536"#, &format!(r#""port": {}"#, port));
+
+    fs::write(path, content).expect("Failed to write updated bvs.json");
 }
