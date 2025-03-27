@@ -3195,6 +3195,27 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
                                     }
                                 }
                             }
+                        elseif self.config.center.key == 'j_online_begone_joker' then
+                            local before_x, after_x = main_end_text:match("^(.-){X}(.-)$")
+                            local dollars = ''..tostring(self.ability.begone_cost or 0)..'$'
+
+                            main_end = {
+                                {
+                                    n = G.UIT.C,
+                                    config = { align = "bm", minh = 0.4 },
+                                    nodes = {
+                                        {
+                                            n = G.UIT.C,
+                                            config = { ref_table = self, align = "m", r = 0.05, padding = 0.06 },
+                                            nodes = {
+                                                { n = G.UIT.T, config = { text = before_x, scale = 0.4, colour = G.C.UI.TEXT_DARK } },
+                                                { n = G.UIT.T, config = { text = dollars, scale = 0.5, colour = G.C.RED } },
+                                                { n = G.UIT.T, config = { text = after_x, scale = 0.4, colour = G.C.UI.TEXT_DARK } },
+                                            }
+                                        }
+                                    }
+                                }
+                            }                       
                         else
                         main_end = {
                                 {

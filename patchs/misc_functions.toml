@@ -18,6 +18,7 @@ payload = '''
           b_versus_friendlies_tip3 = "(Watch out for O (letter) and 0 (number))",
           b_versus_friendlies_enter_code = "Press Enter to confirm",
           b_versus_friendlies_paste_code = "Paste opponent code",
+          b_versus_friendlies_copy_code = "Copy your code",
           b_versus_friendlies_start = "Start",
           b_versus_rematch = "Rematch",
           b_versus_opponent_disconnected = "Opponent disconnected",
