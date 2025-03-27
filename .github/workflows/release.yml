@@ -23,7 +23,7 @@ jobs:
         run: |
           echo '#[cfg(feature = "with_integrity")]
               pub fn get_integrity_hash() -> String {
-                  "'"${{ secrets.INTEGRITY_HASH }}"'".to_string()
+                  "${{ secrets.INTEGRITY_HASH }}".to_string()
               }
           ' > core/src/modules/integrity.rs
           echo 'Updated with integrity hash!'
