@@ -91,7 +91,7 @@ impl From<Table> for CardConf {
                     center,
                     card,
                     center_key,
-                    ability: "".to_string(),
+                    ability,
                     versus_center_id,
                 };
             }
@@ -105,7 +105,7 @@ impl From<Table> for CardConf {
                     center,
                     card,
                     center_key,
-                    ability: "".to_string(),
+                    ability,
                     versus_center_id,
                 };
             }
@@ -119,7 +119,7 @@ impl From<Table> for CardConf {
                     center,
                     card,
                     center_key,
-                    ability: "".to_string(),
+                    ability,
                     versus_center_id,
                 };
             }

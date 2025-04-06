@@ -627,14 +627,14 @@ end
 match_indent = true
 times = 1
 
-# exit_overlay_menu :  Quit server if connected and exiting overlay menu
+# exit_overlay_menu :  Quit server if connected and exiting overlay menu and not in game
 [[patches]]
 [patches.pattern]
 target = "functions/button_callbacks.lua"
 pattern = '''if not G.OVERLAY_MENU then return end'''
 position = "after"
 payload = '''
-if BALATRO_VS_CTX then    
+if BALATRO_VS_CTX and not BALATRO_VS_CTX.network.is_live then    
     if network_quit_matchmaking then
         network_quit_matchmaking()
     end    

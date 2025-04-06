@@ -572,9 +572,6 @@ function on_opponent_use_consumeable_card(index, is_consumeable, highlighted_car
                             G.E_MANAGER:add_event(Event({
                                 trigger = 'after',
                                 func = function()
-                                    --Unhighlight opponent cards
-                                    G.opponent_hand:unhighlight_all()
-
                                     G.E_MANAGER:add_event(Event({
                                         trigger = 'after',
                                         func = function()
@@ -704,7 +701,8 @@ G.FUNCS.network_send_open_booster = function(card, shop_jokers_cards)
                 shop_joker_conf.ability = shop_joker.ability and lume.serialize(shop_joker.ability) or ''
                 shop_joker_conf.center_key = shop_joker.config.center_key
                 shop_joker_conf.label = shop_joker.ability.name
-                shop_joker_conf.type_ = string.lower(shop_joker.config.center.set)
+                shop_joker_conf.type_ = (shop_joker.config.center.set == 'Planet' or shop_joker.config.center.set == 'Tarot') and
+                    'consumeable' or string.lower(shop_joker.config.center.set)
                 table.insert(shop_jokers_cards_conf, shop_joker_conf)
             end
         end
@@ -1074,8 +1072,10 @@ function on_opponent_disconnected_in_game()
     BALATRO_VS_CTX.network.is_live = false
     BALATRO_VS_CTX.network.has_confirmed_matchmaking = false
     BALATRO_VS_CTX.network.should_reset = true
-    BALATRO_VS_CTX.timer:stop()
-    BALATRO_VS_CTX.timer = nil
+    if BALATRO_VS_CTX.timer then
+        BALATRO_VS_CTX.timer:stop()
+        BALATRO_VS_CTX.timer = nil
+    end
     G.opp_ext_code = ''
 
     play_sound('negative', 1)

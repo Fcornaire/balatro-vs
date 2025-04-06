@@ -26,7 +26,6 @@ payload = '''
           b_versus_won_round = "You won",
           b_versus_tie_round = "Tie",
           b_versus_default_dollar_won = "Finishing a round",
-          b_versus_dollar_round_won = "Won a round",
           b_versus_won = "Won",
           b_versus_diet_cola_warning = "There is no blind on netplay, tags are useless",
           b_versus_campfire_warning = "On netplay, Campfire reset every 3 rounds",

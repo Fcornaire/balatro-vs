@@ -67,6 +67,9 @@ function toggle_click(cards, can)
     lume.each(cards, function(card)
         card.states.click.can = can
         card.states.drag.can = can
+        if not can then
+            card.highlighted = false
+        end
     end)
 end
 

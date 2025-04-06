@@ -187,20 +187,6 @@ payload = '''
                 }
             }
         })
-    elseif BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and config.name == 'won_round_dollars' then
-        table.insert(left_text, {
-            n = G.UIT.C,
-            config = { padding = 0.05, align = 'cm' },
-            nodes = {
-                {
-                    n = G.UIT.R,
-                    config = { align = 'cm' },
-                    nodes = {
-                        { n = G.UIT.O, config = { object = DynaText({ string = { localize('b_versus_dollar_round_won') }, colours = { G.C.WHITE }, shadow = true, float = false, spacing = 10, rotate = true, scale = 0.6 * scale, pop_in = 0.4, maxw = 6.5 }) } },
-                    }
-                }
-            }
-        })
 '''
 match_indent = true
 times = 1
