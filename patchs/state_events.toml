@@ -169,14 +169,12 @@ times = 1
 [patches.pattern]
 target = "functions/state_events.lua"
 pattern = '''add_round_eval_row({name = 'bottom', dollars = dollars})'''
-position = "at"
+position = "before"
 payload = '''
     if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
         --Default dollars gain finishing a round is 4
         dollars = dollars + 4
         add_round_eval_row({dollars = 4, bonus = true, name='default_dollars', pitch = pitch})
-        
-        add_round_eval_row({name = 'bottom', dollars = dollars})
     end
 '''
 match_indent = true
@@ -520,6 +518,21 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
                             v.ability.forced_selection = nil
     end
 end
+'''
+match_indent = true
+times = 1
+
+# end_round: handle online card interaction before jokers calculation
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''function end_round()'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    BALATRO_VS_CTX.interaction_context:handle_interaction({end_of_round_before_jokers = true}, {})     
+end
+
 '''
 match_indent = true
 times = 1

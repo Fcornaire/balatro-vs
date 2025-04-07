@@ -394,40 +394,31 @@ function initialize_online_cards(game_object)
                     end
                 end,
                 individual = function(card, _, game_context)
-                    if not card.params.is_opponent then
-                        if game_context.cardarea == G.opponent_play then
-                            if game_context.other_card:get_id() == card.ability.countdown_id and game_context.other_card:is_suit(card.ability.countdown_suit) then
-                                if not card.ability.countdown_should_remove then
-                                    card.ability.countdown_should_remove = true
-                                    card:set_debuff(true)
-                                    card_eval_status_text(card, 'jokers', nil, nil, nil, {
-                                        message = localize('k_debuffed'),
-                                        colour = G.C.RED
-                                    })
-                                end
-
-                                return true
+                    if game_context.cardarea == G.opponent_play then
+                        if game_context.other_card:get_id() == card.ability.countdown_id and game_context.other_card:is_suit(card.ability.countdown_suit) then
+                            if not card.ability.countdown_should_remove then
+                                card.ability.countdown_should_remove = true
+                                card:set_debuff(true)
+                                card_eval_status_text(card, 'jokers', nil, nil, nil, {
+                                    message = localize('k_debuffed'),
+                                    colour = G.C.RED
+                                })
                             end
                         end
-                    else
-                        if game_context.cardarea == G.play then
-                            if game_context.other_card:get_id() == card.ability.countdown_id and game_context.other_card:is_suit(card.ability.countdown_suit) then
-                                if not card.ability.countdown_should_remove then
-                                    card.ability.countdown_should_remove = true
-                                    card:set_debuff(true)
-                                    opponent_card_eval_status_text(card, 'jokers', nil, nil, nil, {
-                                        message = localize('k_debuffed'),
-                                        colour = G.C.RED
-                                    })
-                                end
-
-                                return true
+                    elseif game_context.cardarea == G.play then
+                        if game_context.other_card:get_id() == card.ability.countdown_id and game_context.other_card:is_suit(card.ability.countdown_suit) then
+                            if not card.ability.countdown_should_remove then
+                                card.ability.countdown_should_remove = true
+                                card:set_debuff(true)
+                                opponent_card_eval_status_text(card, 'jokers', nil, nil, nil, {
+                                    message = localize('k_debuffed'),
+                                    colour = G.C.RED
+                                })
                             end
                         end
                     end
-                    return false
                 end,
-                end_of_round_after_jokers = function(card)
+                end_of_round_before_jokers = function(card)
                     if card.ability.countdown_should_remove then
                         card:start_dissolve()
                     end

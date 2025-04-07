@@ -1585,7 +1585,7 @@ function Card:opponent_calculate_joker(context)
                     end
                 else
                         if self.ability.name == 'Loyalty Card' then
-                            self.ability.loyalty_remaining = (self.ability.extra.every-1-(G.GAME.hands_played - self.ability.hands_played_at_create))%(self.ability.extra.every+1)
+                            self.ability.loyalty_remaining = (self.ability.extra.every-1-(G.GAME.opponent_hands_played - self.ability.hands_played_at_create))%(self.ability.extra.every+1)
                             if context.blueprint then
                                 if self.ability.loyalty_remaining == self.ability.extra.every then
                                     return {

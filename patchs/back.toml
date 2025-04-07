@@ -1,0 +1,20 @@
+[manifest]
+version = "0.1.0"
+priority = 0
+
+#set_blind: allow bonus discard money on netplay
+[[patches]]
+[patches.pattern]
+target = "back.lua"
+pattern = "function Back:apply_to_run()"
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.GAME.modifiers.money_per_discard = 1
+    G.GAME.modifiers.no_extra_hand_money = false --Turn off the no extra hand money modifier
+end
+
+'''
+match_indent = true
+times = 1
+
