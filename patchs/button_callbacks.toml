@@ -511,7 +511,7 @@ end
 match_indent = true
 times = 1
 
-# go_to_menu : Restore view when going back to main menu
+# go_to_menu : Restore view when going back to main menu and reset netplay context
 [[patches]]
 [patches.pattern]
 target = "functions/button_callbacks.lua"
@@ -522,6 +522,8 @@ if BALATRO_VS_CTX then
     G.TILE_W = ORIG_RENDER_SCALE.TILE_W
     G.TILE_H = ORIG_RENDER_SCALE.TILE_H
     G.TILESCALE = ORIG_RENDER_SCALE.TILESCALE
+
+    end_network()
 
     --Also restore the original progress
     if BALATRO_VS_CTX.progress then

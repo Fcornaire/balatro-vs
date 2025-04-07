@@ -1069,14 +1069,10 @@ function on_opponent_disconnected_from_found()
 end
 
 function on_opponent_disconnected_in_game()
-    BALATRO_VS_CTX.network.is_live = false
-    BALATRO_VS_CTX.network.has_confirmed_matchmaking = false
-    BALATRO_VS_CTX.network.should_reset = true
-    if BALATRO_VS_CTX.timer then
-        BALATRO_VS_CTX.timer:stop()
-        BALATRO_VS_CTX.timer = nil
-    end
-    G.opp_ext_code = ''
+    --Ignore if game over or won
+    if G.STATE == G.STATES.GAME_OVER or G.GAME.won then return end
+
+    end_network()
 
     play_sound('negative', 1)
     G.SETTINGS.paused = true
@@ -1098,4 +1094,18 @@ function on_opponent_disconnected_in_game()
         },
             config = { no_esc = true } })
     }
+end
+
+function end_network()
+    if BALATRO_VS_CTX.network.is_live then
+        BALATRO_VS_CTX.network.is_live = false
+        BALATRO_VS_CTX.network.has_confirmed_matchmaking = false
+        BALATRO_VS_CTX.network.should_reset = true
+    end
+
+    if BALATRO_VS_CTX.timer then
+        BALATRO_VS_CTX.timer:stop()
+        BALATRO_VS_CTX.timer = nil
+    end
+    G.opp_ext_code = ''
 end
