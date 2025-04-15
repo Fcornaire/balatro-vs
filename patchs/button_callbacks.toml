@@ -36,7 +36,9 @@ target = "functions/button_callbacks.lua"
 pattern = '''G.FUNCS.sort_hand_suit = function(e)'''
 position = "after"
 payload = '''
-G.FUNCS.network_player_sort_hand_suit()
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.FUNCS.network_player_sort_hand_suit()
+end
 '''
 match_indent = true
 times = 1
@@ -47,7 +49,9 @@ target = "functions/button_callbacks.lua"
 pattern = '''G.FUNCS.sort_hand_value = function(e)'''
 position = "after"
 payload = '''
-G.FUNCS.network_player_sort_hand_value()
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    G.FUNCS.network_player_sort_hand_value()
+end
 '''
 match_indent = true
 times = 1

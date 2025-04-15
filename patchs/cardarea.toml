@@ -2,6 +2,7 @@
 version = "0.1.0"
 priority = 0
 
+#move: --Ignore sliding up/down for the hand area if in netplay
 [[patches]]
 [patches.pattern]
 target = "cardarea.lua"
@@ -16,7 +17,17 @@ pattern = '''--Set sliding up/down for the hand area
     end'''
 position = "at"
 payload = '''
-    --Ignore sliding up/down for the hand area
+    if not BALATRO_VS_CTX or not BALATRO_VS_CTX.network.is_live then
+        --Set sliding up/down for the hand area
+        if self == G.hand then 
+            local desired_y = G.TILE_H - G.hand.T.h - 1.9*((not G.deck_preview and (G.STATE == G.STATES.SELECTING_HAND or G.STATE == G.STATES.DRAW_TO_HAND)) and 1 or 0)
+            G.hand.T.y = 15*G.real_dt*desired_y + (1-15*G.real_dt)*G.hand.T.y
+            if math.abs(desired_y - G.hand.T.y) < 0.01 then G.hand.T.y = desired_y end
+            if G.STATE == G.STATES.TUTORIAL then 
+                G.play.T.y = G.hand.T.y - (3 + 0.6)
+            end
+        end
+    end
 '''
 match_indent = true
 times = 1

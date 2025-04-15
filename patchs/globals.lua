@@ -1858,6 +1858,11 @@ G.FUNCS.draw_from_opponnent_hand_to_opponent_discard = function(e)
 end
 
 G.FUNCS.network_wait_for_opponent_action_on_end_shop = function()
+    if not BALATRO_VS_CTX or not BALATRO_VS_CTX.is_in_shop_and_ready then
+        G.FUNCS.toggle_shop()
+        return
+    end
+
     if network_wait_for_opponent_action_on_end_shop then
         G.shop:get_UIE_by_ID("next_round_button").states.visible = false
         G.shop:get_UIE_by_ID("reroll_shop_button").states.visible = false

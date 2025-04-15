@@ -13,7 +13,7 @@ payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
    self:prep_stage(G.STAGES.RUN, G.STATES.DRAW_TO_HAND)
 else
-    self:prep_stage(G.STAGES.RUN, saveTable and saveTable.STATE or G.STATES.DRAW_TO_HAND)
+    self:prep_stage(G.STAGES.RUN, saveTable and saveTable.STATE or G.STATES.BLIND_SELECT)
 end
 '''
 match_indent = true
@@ -34,12 +34,14 @@ self.GAME.opponent_round_resets.reroll_cost = self.GAME.base_reroll_cost
 match_indent = true
 times = 1
 
+# start_run: Initialize opponent card areas if in netplay
 [[patches]]
 [patches.pattern]
 target = "game.lua"
 pattern = '''{card_limit = self.GAME.starting_params.hand_size, type = 'hand'})'''
 position = "after"
 payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
  -- Initialize opponent
 
     G.opponent_playing_cards = {}
@@ -70,6 +72,7 @@ payload = '''
         0, 0,
         CAI.discard_W,CAI.discard_H,
         {card_limit = 500, type = 'discard'})
+end
 '''
 match_indent = true
 times = 1

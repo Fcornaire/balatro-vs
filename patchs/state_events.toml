@@ -48,23 +48,23 @@ end
 match_indent = true
 times = 2
 
-
+# play_cards_from_highlighted : Play card from opponent highlighted if in netplay
 [[patches]]
 [patches.pattern]
 target = "functions/state_events.lua"
 pattern = '''check_for_unlock({type = 'run_card_replays'})'''
 position = "before"
 payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
     delay(0.5)
 
     for i=1, #G.opponent_hand.highlighted do
-        if G.opponent_hand.highlighted[i]:is_face() then inc_career_stat('c_face_cards_played', 1) end
         G.opponent_hand.highlighted[i].base.times_played = G.opponent_hand.highlighted[i].base.times_played + 1
         G.opponent_hand.highlighted[i].ability.played_this_ante = true
         G.GAME.opponent_round_scores.cards_played.amt = G.GAME.opponent_round_scores.cards_played.amt + 1
         draw_card(G.opponent_hand, G.opponent_play, i*100/#G.opponent_hand.highlighted, 'up', nil, G.opponent_hand.highlighted[i])
     end
-
+end
 '''
 match_indent = true
 times = 1
@@ -435,6 +435,7 @@ target = "functions/state_events.lua"
 pattern = '''G.GAME.current_round.used_packs = {}'''
 position = "after"
 payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
 G.GAME.opponent_current_round.discards_left = math.max(0, G.GAME.opponent_round_resets.discards + G.GAME.round_bonus.discards) --TODO: Round bonus opponent
 G.GAME.opponent_current_round.hands_left = (math.max(1, G.GAME.opponent_round_resets.hands + G.GAME.round_bonus.next_hands)) --TODO: Round bonus opponent
 G.GAME.opponent_current_round.hands_played = 0
@@ -450,7 +451,7 @@ G.GAME.opponent_current_round.used_packs = {}
             end
     local chaos = opponent_find_joker('Chaos the Clown')
     G.GAME.opponent_current_round.free_rerolls = #chaos
-
+end
 '''
 match_indent = true
 times = 1
