@@ -81,7 +81,12 @@ function on_create_timer(duration, callback_name, should_start)
         return
     end
 
+    BALATRO_VS_CTX.interaction_context:handle_interaction({ on_new_timer = true }, {})
+
     BALATRO_VS_CTX.timer = EventTimer:new(duration, callback)
+
+    BALATRO_VS_CTX.interaction_context:handle_interaction({ on_create_timer = true }, {})
+
     if should_start then
         if G.jokers then
             toggle_click(G.jokers.cards, true)

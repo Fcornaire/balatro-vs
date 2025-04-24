@@ -573,6 +573,59 @@ function initialize_online_cards(game_object)
             },
             cleanups = {
             }
+        },
+        j_online_chrono_triggered = {
+            key = 'j_online_chrono_triggered',
+            rarity = 4,
+            order = 10,
+            discovered = true,
+            cost = 3,
+            name = "Chrono Triggered",
+            pos = { x = 9, y = 9 },
+            set = "Joker",
+            config = {},
+            perishable_compat = true,
+            description = {
+                main = "Reduce the opponent timer",
+                sub = "This can be stacked up to 3 times (1 = 1/4, 2 = 1/3, 3 = 1/2). Cannot be debuffed"
+            },
+            can_activate_more_than_once_per_chain = true,
+            actions = {
+                on_create_timer = function(card, _, _)
+                    if card.params.is_opponent then
+                        local all_chrono_triggered_active = lume.filter(G.opponent_jokers.cards, function(c)
+                            return c.config.center.key == 'j_online_chrono_triggered' and c.ability.chrono_triggered
+                        end)
+
+                        card:juice_up()
+                        play_sound('cardSlide1')
+
+                        -- No more than 3 active
+                        if #all_chrono_triggered_active == 3 then
+                            return
+                        end
+
+
+                        local modifier = 0.25 -- 1/4
+
+                        if #all_chrono_triggered_active == 1 then
+                            modifier = 0.33 -- 1/3
+                        elseif #all_chrono_triggered_active == 2 then
+                            modifier = 0.5  -- 1/2
+                        end
+
+                        BALATRO_VS_CTX.timer:modify(modifier)
+                        card.ability.chrono_triggered = true
+                    end
+                end,
+                on_new_timer = function(card, _, _)
+                    if card.ability.chrono_triggered then
+                        card.ability.chrono_triggered = false
+                    end
+                end,
+            },
+            cleanups = {
+            }
         }
     }
 end
