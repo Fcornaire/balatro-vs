@@ -124,6 +124,10 @@ function EventTimer:start_paused()
     self.paused = true
 end
 
+function EventTimer:modify(new_duration_modifier)
+    self.time_left = self.duration - (self.duration * new_duration_modifier)
+end
+
 function EventTimer:update(dt)
     if not G.SETTINGS.paused and self.active and not self.paused then
         self.time_left = self.time_left - dt
