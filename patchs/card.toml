@@ -668,7 +668,7 @@ function Card:opponent_calculate_joker(context)
             end
             if self.ability.name == 'Fortune Teller' and not context.blueprint and (context.consumeable.ability.set == "Tarot") then
                 G.E_MANAGER:add_event(Event({
-                    func = function() opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type='variable',key='a_mult',vars={G.GAME.consumeable_usage_total.tarot}}}); return true
+                    func = function() opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize{type='variable',key='a_mult',vars={G.GAME.opponent_consumeable_usage_total.tarot}}}); return true
                     end}))
             end
             if self.ability.name == 'Constellation' and not context.blueprint and context.consumeable.ability.set == 'Planet' then
@@ -1968,10 +1968,10 @@ function Card:opponent_calculate_joker(context)
                                 mult_mod = self.ability.mult
                             }
                         end
-                        if self.ability.name == 'Fortune Teller' and G.GAME.consumeable_usage_total and G.GAME.consumeable_usage_total.tarot > 0 then
+                        if self.ability.name == 'Fortune Teller' and G.GAME.opponent_consumeable_usage_total and G.GAME.opponent_consumeable_usage_total.tarot > 0 then
                             return {
-                                message = localize{type='variable',key='a_mult',vars={G.GAME.consumeable_usage_total.tarot}},
-                                mult_mod = G.GAME.consumeable_usage_total.tarot
+                                message = localize{type='variable',key='a_mult',vars={G.GAME.opponent_consumeable_usage_total.tarot}},
+                                mult_mod = G.GAME.opponent_consumeable_usage_total.tarot
                             }
                         end
                         if self.ability.name == 'Gros Michel' then
@@ -2135,7 +2135,7 @@ end
 
 function Card:opponent_use_consumeable(area, copier)
     stop_use()
-    if not copier then set_consumeable_usage(self,true) end
+    if not copier then opponent_set_consumeable_usage(self) end
     if self.debuff then return nil end
     local used_tarot = copier or self
 
@@ -2941,8 +2941,8 @@ times = 1
 [[patches]]
 [patches.pattern]
 target = "card.lua"
-pattern = '''elseif self.ability.name == 'Abstract Joker' then loc_vars = {self.ability.extra, (G.jokers and G.jokers.cards and #G.jokers.cards or 0)*self.ability.extra}'''
-position = "at"
+pattern = '''elseif self.ability.name == 'Half Joker' then loc_vars = {self.ability.extra.mult, self.ability.extra.size}'''
+position = "after"
 payload = '''
 elseif self.ability.name == 'Abstract Joker' then 
     if self.area == G.opponent_jokers then
@@ -2974,6 +2974,73 @@ elseif self.ability.name == 'Bootstraps' then
     else
         loc_vars = {self.ability.extra.mult, self.ability.extra.dollars, self.ability.extra.mult*math.floor((G.GAME.dollars + (G.GAME.dollar_buffer or 0))/self.ability.extra.dollars)}
     end
+elseif self.ability.name == 'Ancient Joker' then
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra, localize(G.GAME.opponent_current_round.ancient_card.suit, 'suits_singular'), colours = {G.C.SUITS[G.GAME.opponent_current_round.ancient_card.suit]}}
+    else
+        loc_vars = {self.ability.extra, localize(G.GAME.current_round.ancient_card.suit, 'suits_singular'), colours = {G.C.SUITS[G.GAME.current_round.ancient_card.suit]}}
+    end
+elseif self.ability.name == 'Space Joker' then 
+    if self.area == G.opponent_jokers then
+        loc_vars = {''..(G.GAME and G.GAME.opponent_probabilities.normal or 1), self.ability.extra}
+    else
+        loc_vars = {''..(G.GAME and G.GAME.probabilities.normal or 1), self.ability.extra}
+    end
+elseif self.ability.name == '8 Ball' then 
+    if self.area == G.opponent_jokers then
+        loc_vars = {''..(G.GAME and G.GAME.opponent_probabilities.normal or 1), self.ability.extra}
+    else
+        loc_vars = {''..(G.GAME and G.GAME.probabilities.normal or 1), self.ability.extra}
+    end
+elseif self.ability.name == 'Business Card' then loc_vars = {''..(G.GAME and G.GAME.probabilities.normal or 1), self.ability.extra}
+    if self.area == G.opponent_jokers then
+        loc_vars = {''..(G.GAME and G.GAME.opponent_probabilities.normal or 1), self.ability.extra}
+    else
+        loc_vars = {''..(G.GAME and G.GAME.probabilities.normal or 1), self.ability.extra}
+    end
+elseif self.ability.name == 'Bloodstone' then 
+    if self.area == G.opponent_jokers then
+        loc_vars = {''..(G.GAME and G.GAME.opponent_probabilities.normal or 1), self.ability.extra.odds, self.ability.extra.Xmult}
+    else
+        loc_vars = {''..(G.GAME and G.GAME.probabilities.normal or 1), self.ability.extra.odds, self.ability.extra.Xmult}
+    end
+elseif self.ability.name == 'The Idol' then 
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra, localize(G.GAME.opponent_current_round.idol_card.rank, 'ranks'), localize(G.GAME.opponent_current_round.idol_card.suit, 'suits_plural'), colours = {G.C.SUITS[G.GAME.opponent_current_round.idol_card.suit]}}
+    else
+        loc_vars = {self.ability.extra, localize(G.GAME.current_round.idol_card.rank, 'ranks'), localize(G.GAME.current_round.idol_card.suit, 'suits_plural'), colours = {G.C.SUITS[G.GAME.current_round.idol_card.suit]}}
+    end
+elseif self.ability.name == 'Cavendish' then
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra.Xmult, ''..(G.GAME and G.GAME.opponent_probabilities.normal or 1), self.ability.extra.odds}
+    else
+        loc_vars = {self.ability.extra.Xmult, ''..(G.GAME and G.GAME.probabilities.normal or 1), self.ability.extra.odds}
+    end
+elseif self.ability.name == 'Reserved Parking' then
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra.dollars, ''..(G.GAME and G.GAME.opponent_probabilities.normal or 1), self.ability.extra.odds}
+    else
+        loc_vars = {self.ability.extra.dollars, ''..(G.GAME and G.GAME.probabilities.normal or 1), self.ability.extra.odds}
+    end
+elseif self.ability.name == 'Hallucination' then
+    if self.area == G.opponent_jokers then
+        loc_vars = {G.GAME.opponent_probabilities.normal, self.ability.extra}
+    else
+        loc_vars = {G.GAME.probabilities.normal, self.ability.extra}
+    end
+elseif self.ability.name == 'Castle' then
+    if self.area == G.opponent_jokers then
+        loc_vars = {self.ability.extra.chip_mod, localize(G.GAME.opponent_current_round.castle_card.suit, 'suits_singular'), self.ability.extra.chips, colours = {G.C.SUITS[G.GAME.opponent_current_round.castle_card.suit]}}
+    else
+        loc_vars = {self.ability.extra.chip_mod, localize(G.GAME.current_round.castle_card.suit, 'suits_singular'), self.ability.extra.chips, colours = {G.C.SUITS[G.GAME.current_round.castle_card.suit]}}
+    end
+elseif self.ability.name == 'Satellite' then
+    local planets_used = 0
+    local usage = self.area == G.opponent_jokers and G.GAME.opponent_consumeable_usage or G.GAME.consumeable_usage
+    for k, v in pairs(usage) do 
+        if v.set == 'Planet' then planets_used = planets_used + 1 end 
+    end
+    loc_vars = {self.ability.extra, planets_used*self.ability.extra}
 
 '''
 match_indent = true

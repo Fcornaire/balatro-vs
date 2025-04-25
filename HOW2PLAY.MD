@@ -8,7 +8,7 @@ Read [Readme](README.md) first and ensure the mod is installed
   <img src="images/h2p_modes.png" alt="modes" />
 </p>
 
-Upon hiting the `play` button :
+Upon hitting the `play` button :
 
 - Random matchmaking : Match against a random opponent
 
@@ -33,7 +33,7 @@ The opponent has to enter the code in his friendlies tab
 
 ## Rules
 
-The game is a first to 10 wins. Try to score more points than your opponent over all your hands. The game change a lot during this mode, below are the notables rules / change applied
+The mode is a first to 10 wins. Try to score more points than your opponent over all your hands. The game change a lot during this mode, below are the notables rules / change applied
 
 ### UI changes
 
@@ -41,18 +41,29 @@ The game is a first to 10 wins. Try to score more points than your opponent over
   <img src="images/h2p_ui.png" alt="modes" />
 </p>
 
-The whole HUD changes to better fit the 1o1 mode:
+The entire HUD is redesigned to better suit 1v1 mode:
 
-- all of your cards are below (hand, jokers, deck and consumeables) ; in contrary, all of your opponent cards are at top
-- below the red `Opponent VS Player` button, you can find your score and how much round you won, hands , discards and run infos ; top for the opponent
-- the right part of the screen is the play area
-- the number at up right is the timer (more info below)
+- All of your cards (hand, jokers, deck, and consumeables) are displayed at the bottom. In contrast, your opponent’s cards are shown at the top.
+- Below the red `Opponent VS Player` button, you’ll find your score, number of rounds won, hand count, discards, and run information; with the opponent’s equivalent at the top.
+- The right side of the screen is dedicated to the play area
+- the number in the top right is the timer (more info below)
 
 ## Give it all !
 
 There is no ante , play all your hands and try to make more points than your opponent. The round is over when both player have no more hands
 
-## Whatch out for the time !
+## Cashout
+
+At the end of the round, you will get a :
+
+- 4$ for finishing a round
+- X$ depending of how many unused discards you have
+
+## Watch out for the time !
+
+<p align="center">
+  <img src="images/h2p_timer.gif" alt="modes" />
+</p>
 
 To prevent the game from stalling, a timer is used to force an action when the countdown ends:
 
@@ -62,6 +73,10 @@ To prevent the game from stalling, a timer is used to force an action when the c
 
 You can't also pause the game or use the original buttons to quit/change options etc...
 
+## Whah about bosses / tags
+
+There are no bosses and tag but might come in a certain way
+
 ## Interactions
 
 To make the mods more fun and interactive, some additional 'disruptive' jokers and consumeables have been added. Their goal is to limit or hinder your opponent's play options.
@@ -70,3 +85,14 @@ To make the mods more fun and interactive, some additional 'disruptive' jokers a
 > Potential balance changes may happen to them in the future.
 
 List of new cards and their effects:
+
+| **Name**             | **Type**    | **Description**                                                                                                                                                                                        |
+| -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Negate**           | Consumeable | Negate the (futures and ongoing) effect of a joker for this round. Click this card first, then the target joker, and finally use this card.                                                            |
+| **Begone! Joker**    | Joker       | Randomly destroy an opponent joker at the end of the round. The owner of this card has to pay {X} at the start of a round to keep this card or destroy it. (X start at 5 and increase by 5 each round) |
+| **Jester**           | Joker       | At the start of each round, randomly swap the centers of the opponent's jokers (restoring them if destroyed). The original jokers' effects remain unchanged.                                           |
+| **Angel touch!**     | Consumeable | Turn a joker into an eternal card. Click this card first, then the target joker, and finally use this card.                                                                                            |
+| **Countdown!**       | Joker       | All opponent jokers become perishable (after 2 rounds). Your opponent has to play a {X} to remove this effect at the end of the round (X being a card to play).                                        |
+| **Discard Maestro**  | Joker       | You can now discard more than 5 cards in your hand. Every X amount > 5 will randomly discard an opponent card.                                                                                         |
+| **Planet eater**     | Joker       | 1/2 chance to randomly change an opponent's planet card.                                                                                                                                               |
+| **Chrono Triggered** | Joker       | Reduce the opponent timer. This can be stacked up to 3 times (1 = 1/4, 2 = 1/3, 3 = 1/2). Unaffected by debuff.                                                                                        |

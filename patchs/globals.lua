@@ -2296,3 +2296,55 @@ function opponent_create_card_for_shop(area)
         check_rate = check_rate + v.val
     end
 end
+
+function opponent_set_consumeable_usage(card)
+    if card.config.center_key and card.ability.consumeable then
+        if G.GAME.opponent_consumeable_usage[card.config.center_key] then
+            G.GAME.opponent_consumeable_usage[card.config.center_key].count = G.GAME.opponent_consumeable_usage
+                [card.config.center_key]
+                .count + 1
+        else
+            G.GAME.opponent_consumeable_usage[card.config.center_key] = {
+                count = 1,
+                order = card.config.center.order,
+                set = card
+                    .ability.set
+            }
+        end
+        G.GAME.opponent_consumeable_usage_total = G.GAME.opponent_consumeable_usage_total or
+            { tarot = 0, planet = 0, spectral = 0, tarot_planet = 0, all = 0 }
+        if card.config.center.set == 'Tarot' then
+            G.GAME.opponent_consumeable_usage_total.tarot = G.GAME.opponent_consumeable_usage_total.tarot + 1
+            G.GAME.opponent_consumeable_usage_total.tarot_planet = G.GAME.opponent_consumeable_usage_total.tarot_planet +
+            1
+        elseif card.config.center.set == 'Planet' then
+            G.GAME.opponent_consumeable_usage_total.planet = G.GAME.opponent_consumeable_usage_total.planet + 1
+            G.GAME.opponent_consumeable_usage_total.tarot_planet = G.GAME.opponent_consumeable_usage_total.tarot_planet +
+            1
+        elseif card.config.center.set == 'Spectral' then
+            G.GAME.opponent_consumeable_usage_total.spectral = G.GAME.opponent_consumeable_usage_total.spectral + 1
+        end
+
+        G.GAME.opponent_consumeable_usage_total.all = G.GAME.opponent_consumeable_usage_total.all + 1
+
+        if not card.config.center.discovered then
+            discover_card(card)
+        end
+
+        if card.config.center.set == 'Tarot' or card.config.center.set == 'Planet' then
+            G.E_MANAGER:add_event(Event({
+                trigger = 'immediate',
+                func = function()
+                    G.E_MANAGER:add_event(Event({
+                        trigger = 'immediate',
+                        func = function()
+                            G.GAME.opponent_last_tarot_planet = card.config.center_key
+                            return true
+                        end
+                    }))
+                    return true
+                end
+            }))
+        end
+    end
+end

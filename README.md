@@ -22,6 +22,7 @@ This mod feature:
 - Peer to peer Online 1o1 netplay (Random matchmaking and friendlies)
 - Some new disruptives jokers for interaction
 - Auto-update
+- Probably won't work with other non cosmetic mods
 
 More info at [How 2 play](./HOW2PLAY.MD) (this will probably move to the wiki at some point)
 
@@ -41,8 +42,7 @@ This mod run with [lovely-injector](https://github.com/ethangreen-dev/lovely-inj
 
 - Copy the `winmm.dll` file to your balatro game folder
 
-> [!IMPORTANT]
-> **Respect the mod architecture.**  
+> [!IMPORTANT] > **Respect the mod architecture.**  
 > **winmm.dll** file goes to your balatro game folder (something like `.../Steam/steamapps/common/Balatro`).
 >
 > **balatro-vs** folder goes to lovely `Mods` folder at `%AppData%/Balatro/Mods`.

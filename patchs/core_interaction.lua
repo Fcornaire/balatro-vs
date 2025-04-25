@@ -100,8 +100,8 @@ function initialize_online_cards(game_object)
             set = "Spectral",
             config = { max_highlighted = 1 },
             description = {
-                main = "Negate the (futures and on going) effect of a joker for this round",
-                sub = "Click this card first, then the target joker and finally use this card"
+                main = "Negate the effects of a joker (both ongoing and upcoming) for this round",
+                sub = "Click this card first, then the target joker, and finally activate this card."
             },
             can_use_consumeable = function(card)
                 return card and card.ability.targets and #card.ability.targets > 0
@@ -136,7 +136,7 @@ function initialize_online_cards(game_object)
             rarity = 4,
             order = 10,
             discovered = true,
-            cost = 3,
+            cost = 8,
             config = {},
             name = "Begone ! Joker",
             pos = { x = 9, y = 9 },
@@ -212,15 +212,16 @@ function initialize_online_cards(game_object)
             rarity = 4,
             order = 10,
             discovered = false,
-            cost = 2,
+            cost = 5,
             config = {},
             name = "Jester",
             pos = { x = 9, y = 9 },
             set = "Joker",
             perishable_compat = true,
             description = {
-                main = "At the start of every round, randomly swap opponent jokers centers (restore if destroyed)",
-                sub = "The original jokers effects remain the same"
+                main =
+                "At the start of each round, randomly swap the centers of the opponent's jokers (restoring them if destroyed)",
+                sub = "The original jokers effects remain unchanged"
             },
             can_activate_more_than_once_per_chain = true,
             on_debuff = function(card)
@@ -293,7 +294,7 @@ function initialize_online_cards(game_object)
             key = 'c_online_eternal',
             order = 10,
             discovered = true,
-            cost = 3,
+            cost = 5,
             consumeable = true,
             name = "Angel touch!",
             pos = { x = 5, y = 2 },
@@ -301,7 +302,7 @@ function initialize_online_cards(game_object)
             config = { max_highlighted = 1 },
             description = {
                 main = "Turn a joker into an eternal card",
-                sub = "Click this card first, then the target joker and finally use this card"
+                sub = "Click this card first, then the target joker, and finally activate this card."
             },
             can_use_consumeable = function(card)
                 return card and card.ability.targets and #card.ability.targets > 0
@@ -336,7 +337,7 @@ function initialize_online_cards(game_object)
             config = {},
             perishable_compat = true,
             description = {
-                main = "All opponent jokers became perishable (after 3 rounds)",
+                main = "All opponent jokers became perishable (after 2 rounds)",
                 sub = "Your opponent have to play a {X} to remove this effect at the end of the round"
             },
             can_activate_more_than_once_per_chain = false,
@@ -367,7 +368,7 @@ function initialize_online_cards(game_object)
                             joker:juice_up()
                             if not joker.ability.perishable then
                                 joker:set_perishable(true)
-                                joker.ability.perish_tally = 3
+                                joker.ability.perish_tally = 2
                             end
                         end
                     else
@@ -388,7 +389,7 @@ function initialize_online_cards(game_object)
                             joker:juice_up()
                             if not joker.ability.perishable then
                                 joker:set_perishable(true)
-                                joker.ability.perish_tally = 3
+                                joker.ability.perish_tally = 2
                             end
                         end
                     end
@@ -443,7 +444,7 @@ function initialize_online_cards(game_object)
             rarity = 4,
             order = 10,
             discovered = true,
-            cost = 3,
+            cost = 6,
             name = "Discard Maestro",
             pos = { x = 9, y = 9 },
             set = "Joker",
@@ -524,7 +525,7 @@ function initialize_online_cards(game_object)
             rarity = 4,
             order = 10,
             discovered = true,
-            cost = 3,
+            cost = 5,
             name = "Planet eater",
             pos = { x = 9, y = 9 },
             set = "Joker",
@@ -579,7 +580,7 @@ function initialize_online_cards(game_object)
             rarity = 4,
             order = 10,
             discovered = true,
-            cost = 3,
+            cost = 4,
             name = "Chrono Triggered",
             pos = { x = 9, y = 9 },
             set = "Joker",
@@ -587,7 +588,7 @@ function initialize_online_cards(game_object)
             perishable_compat = true,
             description = {
                 main = "Reduce the opponent timer",
-                sub = "This can be stacked up to 3 times (1 = 1/4, 2 = 1/3, 3 = 1/2). Cannot be debuffed"
+                sub = "This can be stacked up to 3 times (1 = 1/4, 2 = 1/3, 3 = 1/2). Unaffected by debuff"
             },
             can_activate_more_than_once_per_chain = true,
             actions = {

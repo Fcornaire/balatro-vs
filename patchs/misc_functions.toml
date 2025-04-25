@@ -242,35 +242,7 @@ end
 match_indent = true
 times = 1
 
-#Add a is_oppoent flag to the function...
-[[patches]]
-[patches.pattern]
-target = "functions/misc_functions.lua"
-pattern = "function set_consumeable_usage(card)"
-position = "at"
-payload = '''
-function set_consumeable_usage(card,is_opponent)
-'''
-match_indent = true
-times = 1
-
-#...to use the appropiate last_tarot_planet used
-[[patches]]
-[patches.pattern]
-target = "functions/misc_functions.lua"
-pattern = "G.GAME.last_tarot_planet = card.config.center_key"
-position = "at"
-payload = '''
-if is_opponent then
-    G.GAME.opponent_last_tarot_planet = card.config.center_key
-else
-    G.GAME.last_tarot_planet = card.config.center_key
-end
-'''
-match_indent = true
-times = 1
-
-#Add a is_oppoent flag to the function...
+#Add a is_opponent flag to the function...
 [[patches]]
 [patches.pattern]
 target = "functions/misc_functions.lua"
@@ -309,7 +281,7 @@ match_indent = true
 times = 1
 
 #get_straight
-#... also use the appropiate find_joker for shortcut joker
+#... also use the appropriate find_joker for shortcut joker
 [[patches]]
 [patches.pattern]
 target = "functions/misc_functions.lua"
@@ -345,3 +317,15 @@ local four_fingers =  is_opponent and next(opponent_find_joker('Four Fingers')) 
 '''
 match_indent = true
 times = 2
+
+
+[[patches]]
+[patches.pattern]
+target = "functions/misc_functions.lua"
+pattern = '''colour = part.control.V and args.vars.colours[tonumber(part.control.V)] or loc_colour(part.control.C or nil, args.default_col),'''
+position = "at"
+payload = '''
+colour = args.vars and args.vars.colours and part.control.V and args.vars.colours[tonumber(part.control.V)] or loc_colour(part.control.C or nil, args.default_col) or G.C.BLACK,
+'''
+match_indent = true
+times = 1

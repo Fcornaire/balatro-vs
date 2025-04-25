@@ -213,6 +213,7 @@ target = "game.lua"
 pattern = '''current_round = {'''
 position = "before"
 payload = '''
+opponent_consumeable_usage = {},
 opponent_joker_buffer = 0,
 opponent_used_jokers = {},
 opponent_edition_rate = 1,
