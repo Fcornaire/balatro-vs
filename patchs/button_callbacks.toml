@@ -568,6 +568,21 @@ G.FUNCS.run_info = function(e)
 match_indent = true
 times = 1
 
+# deck_info: prevent pausing the game if on netplay
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.FUNCS.deck_info = function(e)
+  G.SETTINGS.paused = true'''
+position = "at"
+payload = '''
+G.FUNCS.deck_info = function(e)
+  if not BALATRO_VS_CTX or not BALATRO_VS_CTX.network.is_live then
+    G.SETTINGS.paused = true
+  end
+'''
+match_indent = true
+times = 1
 
 # can_skip_booster: Prevent player being able to skip opponent booster
 [[patches]]
