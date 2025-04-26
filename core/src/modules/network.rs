@@ -5,7 +5,7 @@ use matchbox_socket::{PeerId, PeerState, WebRtcSocketBuilder};
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use time::OffsetDateTime;
 use tracing::{debug, error, info, warn};
 
@@ -37,7 +37,7 @@ pub enum NetworkEvent {
     SellCard(usize, bool),
     Cashout(i32),
     Ping(),
-    Pong(u64),
+    Pong(),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -61,9 +61,9 @@ pub struct Network {
     connected_date: Option<OffsetDateTime>,
     opponent: Option<PeerId>,
     rtt: usize,
-    last_timestamp: u64,
-    last_ping_timestamp: Option<u64>,
     friendly_room_code: String,
+    ping_measurement: Instant,
+    is_waiting_for_pong: bool,
 }
 
 impl Network {
@@ -73,29 +73,20 @@ impl Network {
             connected_date: None,
             opponent: None,
             rtt: 0,
-            last_timestamp: 0,
-            last_ping_timestamp: None,
             friendly_room_code: String::new(),
+            ping_measurement: Instant::now(),
+            is_waiting_for_pong: false,
         }
     }
 
     pub fn send_ping(&mut self) {
-        let timestamp = self.current_time_millis();
+        self.ping_measurement = Instant::now();
+        self.is_waiting_for_pong = true;
 
-        self.last_timestamp = timestamp as u64;
         if let Err(e) = self.send_event_to_opponent(NetworkEvent::Ping()) {
             error!("[Network] Send_ping : {:?}", e);
             return;
         }
-    }
-
-    fn current_time_millis(&self) -> u128 {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let start = SystemTime::now();
-        let since_the_epoch = start
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards ?");
-        since_the_epoch.as_millis()
     }
 
     fn send_event_to_opponent(&self, event: NetworkEvent) -> Result<(), String> {
@@ -350,12 +341,10 @@ impl Network {
 
                     //Send ping every 3 seconds
                     if self.opponent.is_some() {
-                        let current_time = self.current_time_millis() as u64;
-                        if self.last_ping_timestamp.is_none()
-                            || current_time - self.last_ping_timestamp.unwrap() >= 3000
+                        if self.ping_measurement.elapsed().as_millis() >= 3000
+                            && !self.is_waiting_for_pong
                         {
                             self.send_ping();
-                            self.last_ping_timestamp = Some(current_time);
                         }
                     }
                 }
@@ -646,20 +635,20 @@ impl Network {
         packet: &Box<[u8]>,
     ) {
         let event: NetworkEvent = deserialize(&packet).unwrap();
-        if !matches!(event, NetworkEvent::Ping() | NetworkEvent::Pong(_)) {
+        if !matches!(event, NetworkEvent::Ping() | NetworkEvent::Pong()) {
             info!("Message from {peer_id}: {event:?}");
         }
 
         match event {
             NetworkEvent::Ping() => {
-                let timestamp = self.current_time_millis();
-                if let Err(e) = self.send_event_to_opponent(NetworkEvent::Pong(timestamp as u64)) {
+                if let Err(e) = self.send_event_to_opponent(NetworkEvent::Pong()) {
                     error!("[Network] Received ping: {:?}", e);
                     return;
                 }
             }
-            NetworkEvent::Pong(timestamp) => {
-                self.rtt = timestamp.saturating_sub(self.last_timestamp) as usize;
+            NetworkEvent::Pong() => {
+                self.rtt = self.ping_measurement.elapsed().as_millis() as usize;
+                self.is_waiting_for_pong = false;
                 debug!(
                     "[Network] Received pong with timestamp: RTT: {} ms",
                     self.rtt
