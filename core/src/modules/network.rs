@@ -1,5 +1,6 @@
 use bincode::{deserialize, serialize};
-use futures::FutureExt;
+use futures::{select, FutureExt};
+use futures_timer::Delay;
 use matchbox_socket::{PeerId, PeerState, WebRtcSocketBuilder};
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
@@ -139,14 +140,21 @@ impl Network {
             .name("matchbox-loop-future_thread".to_string())
             .spawn(move || {
                 get_runtime().block_on(async {
-                    let res = loop_fut.fuse().await;
+                    let loop_fut = loop_fut.fuse();
+                    futures::pin_mut!(loop_fut);
 
-                    match res {
-                        Ok(_) => {
-                            info!("[Network] WebRTC socket closed");
-                        }
-                        Err(e) => {
-                            error!("[Network] WebRTC socket error: {}", e);
+                    let timeout = Delay::new(Duration::from_millis(100));
+                    futures::pin_mut!(timeout);
+
+                    loop {
+                        select! {
+                            _ = (&mut timeout).fuse() => {
+                                timeout.reset(Duration::from_millis(100));
+                            }
+
+                            _ = &mut loop_fut => {
+                                info!("[Network] WebRTC socket closed");
+                            }
                         }
                     }
                 });
