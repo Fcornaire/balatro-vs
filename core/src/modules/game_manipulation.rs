@@ -74,6 +74,10 @@ impl GameManipulation {
         self.seed.clone()
     }
 
+    pub fn regenerate_seed(&mut self) {
+        self.seed = Alphanumeric.sample_string(&mut rand::thread_rng(), 8)
+    }
+
     /// Register an event to be processed
     ///
     /// Some events might be processed immediately

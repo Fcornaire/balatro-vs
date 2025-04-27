@@ -314,6 +314,8 @@ impl Network {
                         self.opponent = None;
                         socket.close();
 
+                        game_manipulation.regenerate_seed();
+
                         match self.state {
                             NetworkState::Found
                             | NetworkState::OpponentConfirm

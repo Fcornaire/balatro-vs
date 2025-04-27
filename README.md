@@ -42,7 +42,8 @@ This mod run with [lovely-injector](https://github.com/ethangreen-dev/lovely-inj
 
 - Copy the `winmm.dll` file to your balatro game folder
 
-> [!IMPORTANT] > **Respect the mod architecture.**  
+> [!IMPORTANT]
+> **Respect the mod architecture.**  
 > **winmm.dll** file goes to your balatro game folder (something like `.../Steam/steamapps/common/Balatro`).
 >
 > **balatro-vs** folder goes to lovely `Mods` folder at `%AppData%/Balatro/Mods`.
@@ -57,7 +58,11 @@ This mod run with [lovely-injector](https://github.com/ethangreen-dev/lovely-inj
   <img src="images/installed.png" alt="installed image" />
 </p>
 
-- Enjoy !
+- Enjoy ! Do not hesitate to open an [issue](https://github.com/Fcornaire/balatro-vs/issues) if you encounter a bug or something isn't working
+
+# Known issue
+
+- For some obscure reason, connection between 2 players might fail. For now, just cancel and restart the matching (Note for me : `failed to open data channel: there already exists a stream with identifier` is what i need to check)
 
 # Building (Developer)
 
