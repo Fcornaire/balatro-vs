@@ -40,7 +40,7 @@ pattern = '''pseudoshuffle(self.cards, pseudoseed(_seed or 'shuffle'))'''
 position = "at"
 payload = '''
     if self == G.opponent_deck then 
-        print('shuffling opponent deck')
+        bvs_debug('shuffling opponent deck')
         pseudoshuffle(self.cards, opponent_pseudoseed(_seed or 'shuffle'))
     else
         pseudoshuffle(self.cards, pseudoseed(_seed or 'shuffle'))

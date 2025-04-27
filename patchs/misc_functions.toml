@@ -81,7 +81,7 @@ pattern = "function save_run()"
 position = "after"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
-    print('not saving on online mode')
+    bvs_debug('not saving on online mode')
     return
 end
 '''

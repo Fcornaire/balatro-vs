@@ -96,7 +96,7 @@ pattern = "G.ROOM_ORIG = {"
 position = "before"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
-     print('prevent resize on netplay')
+     bvs_debug('prevent resize on netplay')
 
     G.TILE_W    = ORIG_RENDER_SCALE.TILE_W * 1.3
     G.TILE_H    = ORIG_RENDER_SCALE.TILE_H * 1.3

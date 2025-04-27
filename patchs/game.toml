@@ -117,7 +117,7 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
             return true
         end
     else 
-        print('No more hands left')
+        bvs_debug('No more hands left')
         G.hand:hard_lock()
         G.FUNCS.game_manipulation_acknowledge_event()
          G.STATE_COMPLETE = true

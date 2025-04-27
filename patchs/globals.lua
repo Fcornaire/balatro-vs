@@ -23,7 +23,7 @@ G.FUNCS.versus_friendlies_start_pairing = function(e)
         network_quit_matchmaking()
         local res = network_start_versus_friendlies_pairing(G.opp_ext_code)
         if not (res) then
-            print("Failed to connect with code " .. G.opp_ext_code)
+            bvs_debug("Failed to connect with code " .. G.opp_ext_code)
         end
     end
 end
@@ -263,7 +263,7 @@ G.FUNCS.lock_highlighted_card = function()
 end
 
 G.FUNCS.opponent_draw_from_his_deck_to_his_hand = function(e)
-    print("Opponent drawing from his deck to his hand")
+    bvs_debug("Opponent drawing from his deck to his hand")
 
     local hand_space = e or
         math.min(#G.opponent_deck.cards, G.opponent_hand.config.card_limit - #G.opponent_hand.cards)
@@ -1956,7 +1956,7 @@ G.FUNCS.opponent_play_cards_from_highlighted = function()
     end
 
     opponent_ease_hands_played(-1)
-    print('opponent_play_cards_from_highlighted')
+    bvs_debug('opponent_play_cards_from_highlighted')
     G.E_MANAGER:add_event(Event({
         trigger = 'after',
         func = function()
@@ -2001,13 +2001,13 @@ end
 
 
 G.FUNCS.opponent_buy_from_shop = function(e)
-    print('opponent_buy_from_shop', e.config.id)
+    bvs_debug('opponent_buy_from_shop', e.config.id)
 
     local c1 = e.config.ref_table
     if c1 and c1:is(Card) then
         if is_online_card(c1.ability.name) then
             if not register_online_interaction(c1) then
-                print('Failed to register online interaction for card: ' .. c1.ability.name)
+                bvs_debug('Failed to register online interaction for card: ' .. c1.ability.name)
             end
         end
 
@@ -2316,11 +2316,11 @@ function opponent_set_consumeable_usage(card)
         if card.config.center.set == 'Tarot' then
             G.GAME.opponent_consumeable_usage_total.tarot = G.GAME.opponent_consumeable_usage_total.tarot + 1
             G.GAME.opponent_consumeable_usage_total.tarot_planet = G.GAME.opponent_consumeable_usage_total.tarot_planet +
-            1
+                1
         elseif card.config.center.set == 'Planet' then
             G.GAME.opponent_consumeable_usage_total.planet = G.GAME.opponent_consumeable_usage_total.planet + 1
             G.GAME.opponent_consumeable_usage_total.tarot_planet = G.GAME.opponent_consumeable_usage_total.tarot_planet +
-            1
+                1
         elseif card.config.center.set == 'Spectral' then
             G.GAME.opponent_consumeable_usage_total.spectral = G.GAME.opponent_consumeable_usage_total.spectral + 1
         end

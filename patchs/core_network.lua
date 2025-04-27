@@ -320,7 +320,7 @@ function on_play_turn(cards)
                                     trigger = 'after',
                                     func = function()
                                         if G.GAME.opponent_current_round.hands_left == 0 then
-                                            print("Opponent has no more hands left")
+                                            bvs_debug("Opponent has no more hands left")
                                             G.STATE = G.STATES.NEW_ROUND
                                             G.STATE_COMPLETE = false
                                         end
@@ -430,7 +430,7 @@ function on_opponent_sort_hand_value()
 end
 
 function on_opponent_new_card(card_conf)
-    print("Opponent placed a card with label: " .. card_conf.label)
+    bvs_debug("Opponent placed a card with label: " .. card_conf.label)
     local center = lume.deserialize(card_conf.center)
     local card = lume.deserialize(card_conf.card)
     local center_key = card_conf.center_key or ''
@@ -532,7 +532,7 @@ function on_processed_remaining_events()
 end
 
 function on_opponent_use_consumeable_card(index, is_consumeable, highlighted_cards_index, targets)
-    print("Opponent used a consumeable card with index: " .. index)
+    bvs_debug("Opponent used a consumeable card with index: " .. index)
 
     G.E_MANAGER:add_event(Event({
         trigger = 'immediate',
@@ -651,7 +651,7 @@ G.FUNCS.network_player_use_voucher_card = function(card)
 end
 
 function on_opponent_use_voucher_card(card_conf)
-    print("Opponent used a voucher card with label: " .. card_conf.label)
+    bvs_debug("Opponent used a voucher card with label: " .. card_conf.label)
     local center = lume.deserialize(card_conf.center)
     local card = lume.deserialize(card_conf.card)
     local center_key = card_conf.center_key
@@ -713,7 +713,7 @@ end
 
 
 function on_opponent_open_booster(card_conf, shop_jokers_cards)
-    print("Opponent opened a booster card with label: " .. card_conf.label)
+    bvs_debug("Opponent opened a booster card with label: " .. card_conf.label)
 
     G.E_MANAGER:add_event(Event({
         trigger = 'immediate',
@@ -756,13 +756,13 @@ function on_opponent_open_booster(card_conf, shop_jokers_cards)
 end
 
 function on_highlighted_booster_card(highlighted_card_index)
-    print("Highlighting booster cards")
+    bvs_debug("Highlighting booster cards")
 
     G.E_MANAGER:add_event(Event({
         trigger = 'immediate',
         func = function()
             if #highlighted_card_index == 0 then
-                print("No booster cards to highlight,skipping")
+                bvs_debug("No booster cards to highlight,skipping")
                 G.FUNCS.opponent_skip_booster(nil)
                 return true
             end
@@ -946,7 +946,7 @@ function on_sell_card(card)
 end
 
 function on_opponent_sell_card(index, is_consumeable)
-    print("Opponent sold a card with index: " .. index)
+    bvs_debug("Opponent sold a card with index: " .. index)
     G.E_MANAGER:add_event(Event({
         trigger = 'immediate',
         func = function()
@@ -1011,7 +1011,7 @@ function on_opponent_cash_out(new_dollars)
 end
 
 function on_opponent_disconnected_from_found()
-    print("Opponent disconnected before accepting the match")
+    bvs_debug("Opponent disconnected before accepting the match")
     BALATRO_VS_CTX.network.has_confirmed_matchmaking = false
     play_sound('cancel', 1)
     G.FUNCS.overlay_menu {

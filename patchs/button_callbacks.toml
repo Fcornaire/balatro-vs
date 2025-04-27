@@ -451,7 +451,7 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
       type = 'joker'
     end
   else
-    print('set', c1.config.center.set)
+    bvs_debug('set', c1.config.center.set)
     if c1.config.center.set == 'Planet' or c1.config.center.set == 'Tarot' then
       type = 'consumeable'
     end
@@ -606,7 +606,7 @@ payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
     if is_online_card(e.config.ref_table.ability.name) then
         if not register_online_interaction(e.config.ref_table) then
-            print('Failed to register online interaction for card: ' .. e.config.ref_table.ability.name)
+            bvs_debug('Failed to register online interaction for card: ' .. e.config.ref_table.ability.name)
         end
     end
 end

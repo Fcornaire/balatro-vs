@@ -523,7 +523,7 @@ pattern = '''function add_tag(_tag)'''
 position = "after"
 payload = '''
   if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
-    print('there is no blind on netplay, all tags are useless')
+    bvs_debug('there is no blind on netplay, all tags are useless')
     return
   end
 '''

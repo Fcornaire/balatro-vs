@@ -139,7 +139,7 @@ position = "after"
 payload = '''
 
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
-    print('player discarded cards')
+    bvs_debug('player discarded cards')
     local discarded_index = get_all_highlighted_hand_cards_index()
     G.FUNCS.network_player_discarded_cards(discarded_index)
 end
@@ -196,7 +196,7 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
          trigger = 'after',
          func = function()
              if G.hand.locked then
-                 print('Freeing player hand!')
+                 bvs_debug('Freeing player hand!')
                  G.hand:unlock()
 
                 --Hand changed, we need to update the alignement

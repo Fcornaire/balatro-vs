@@ -1,3 +1,9 @@
+function bvs_debug(msg)
+    if IS_DEV then
+        print(msg)
+    end
+end
+
 function pretty_print(center)
     local seen = {}
     local function serialize(value)
@@ -36,7 +42,7 @@ function pretty_print(center)
     end)
 
     formatted = formatted:gsub(",([^}])", ",\n" .. addIndentation("%1"))
-    print(formatted)
+    bvs_debug(formatted)
 end
 
 -- VecDeque implementation
@@ -143,12 +149,12 @@ end
 
 function EventTimer:pause()
     if not self.active then
-        print("Timer is not active")
+        bvs_debug("Timer is not active")
         return
     end
 
     if self.paused then
-        print("Timer is already paused")
+        bvs_debug("Timer is already paused")
         return
     end
 
@@ -156,14 +162,14 @@ function EventTimer:pause()
 end
 
 function EventTimer:resume()
-    print("Resuming timer")
+    bvs_debug("Resuming timer")
     if not self.active then
-        print("Timer is not active")
+        bvs_debug("Timer is not active")
         return
     end
 
     if not self.paused then
-        print("Timer is not paused")
+        bvs_debug("Timer is not paused")
         return
     end
 
@@ -172,7 +178,7 @@ end
 
 function EventTimer:stop()
     if not self.active then
-        print("Timer is not active")
+        bvs_debug("Timer is not active")
         return
     end
 

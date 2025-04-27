@@ -3506,7 +3506,7 @@ if BALATRO_VS_CTX
     local count = max_id + 1
         
     self.balatro_vs_center_id = count
-    print('Setting balatro_vs_center_id to ' .. count .. ' for ' .. self.ability.name)
+    bvs_debug('Setting balatro_vs_center_id to ' .. count .. ' for ' .. self.ability.name)
 end
 
 '''

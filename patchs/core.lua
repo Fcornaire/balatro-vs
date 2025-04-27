@@ -9,7 +9,7 @@ local EventTimer = require("balatro-vs_utils").EventTimer
 local timer_callback = {
     on_wait_for_user_action_over = function()
         if G.STATE == G.STATES.SELECTING_HAND then --Force empty sent if timer runs out
-            print("Timer ran out, sending a random card")
+            bvs_debug("Timer ran out, sending a random card")
 
             if G.OVERLAY_MENU then --On the run infos overlay, exit it
                 G.FUNCS.exit_overlay_menu()
@@ -77,7 +77,7 @@ function on_create_timer(duration, callback_name, should_start)
     local callback = timer_callback[callback_name]
 
     if not callback then
-        print("Callback not found")
+        bvs_debug("Callback not found")
         return
     end
 
@@ -102,12 +102,12 @@ end
 
 function on_start_timer()
     if not BALATRO_VS_CTX.timer then
-        print("Timer is not created")
+        bvs_debug("Timer is not created")
         return
     end
 
     if BALATRO_VS_CTX.timer.active then
-        print("Timer is already running")
+        bvs_debug("Timer is already running")
         return
     end
 
@@ -124,12 +124,12 @@ end
 
 function on_pause_timer()
     if not BALATRO_VS_CTX.timer then
-        print("Timer is not created")
+        bvs_debug("Timer is not created")
         return
     end
 
     if not BALATRO_VS_CTX.timer.active then
-        print("Timer is not running")
+        bvs_debug("Timer is not running")
         return
     end
 
@@ -138,12 +138,12 @@ end
 
 function on_resume_timer()
     if not BALATRO_VS_CTX.timer then
-        print("Timer is not created")
+        bvs_debug("Timer is not created")
         return
     end
 
     if not BALATRO_VS_CTX.timer.active then
-        print("Timer is not running")
+        bvs_debug("Timer is not running")
         return
     end
 
@@ -152,12 +152,12 @@ end
 
 function on_stop_timer()
     if not BALATRO_VS_CTX.timer then
-        print("Timer is not created")
+        bvs_debug("Timer is not created")
         return
     end
 
     if not BALATRO_VS_CTX.timer.active then
-        print("Timer is not running")
+        bvs_debug("Timer is not running")
         return
     end
 

@@ -659,7 +659,7 @@ end
 function get_center_for_online_card_by_name(name) --Mostly the same as above but without the functions
     local center = get_online_center_config_by_name_or_key(name)
     if not center then
-        print("Center not found for name: " .. name)
+        bvs_debug("Center not found for name: " .. name)
         return nil
     end
     return custom_copy_table(center)
@@ -857,7 +857,7 @@ function InteractionManager:handle_interaction(game_context, interaction_context
             for ctx_key, ctx_val in pairs(game_context) do
                 if ctx_val and action.context_actions[ctx_key] then
                     for ctx_name, act in pairs(action.context_actions[ctx_key]) do
-                        --print("Executing action for owner: " .. action.owner.ability.name .. ", Context: " .. ctx_key)
+                        --bvs_debug("Executing action for owner: " .. action.owner.ability.name .. ", Context: " .. ctx_key)
                         act(action.owner, interaction_context, game_context)
                     end
                 end
