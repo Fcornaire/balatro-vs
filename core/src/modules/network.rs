@@ -304,6 +304,13 @@ impl Network {
                     PeerState::Disconnected => {
                         info!("Peer left: {peer}");
 
+                        if self.opponent.is_none() {
+                            warn!(
+                                "but no opponent found ? Ignoring disconnection (server fix needed probably)"
+                            );
+                            continue;
+                        }
+
                         self.opponent = None;
                         socket.close();
 

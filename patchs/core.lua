@@ -295,7 +295,7 @@ BALATRO_VS_CTX = {
     main_goal = 10,
     timer = nil,
     is_opponent_first_reroll_shop = true,
-    rounds_played = 1,
+    rounds_played = 1, --TODO: Reset on Campfire sell
     interaction_context = InteractionContext:new(),
     progress = {
 
