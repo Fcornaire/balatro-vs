@@ -28,23 +28,23 @@ G.FUNCS.versus_friendlies_start_pairing = function(e)
     end
 end
 
-G.FUNCS.versus_is_up_to_date = function(e) --TODO: de comment after to re test auto updater
-    -- if BALATRO_VS_CTX then
-    --     if BALATRO_VS_CTX.network.is_updating then
-    --         return
-    --     end
+G.FUNCS.versus_is_up_to_date = function(e)
+    if BALATRO_VS_CTX then
+        if BALATRO_VS_CTX.network.is_updating then
+            return
+        end
 
-    --     if updater_check_for_update and not updater_check_for_update() then
-    --         e.config.colour = G.C.UI.BACKGROUND_INACTIVE
-    --         e.config.button = nil
-    --     end
+        if updater_check_for_update and not updater_check_for_update() then
+            e.config.colour = G.C.UI.BACKGROUND_INACTIVE
+            e.config.button = nil
+        end
 
-    --     if updater_should_update and updater_should_update() and not BALATRO_VS_CTX.network.is_updating then
-    --         BALATRO_VS_CTX.network.is_updating = true
+        if updater_should_update and updater_should_update() and not BALATRO_VS_CTX.network.is_updating then
+            BALATRO_VS_CTX.network.is_updating = true
 
-    --         on_update()
-    --     end
-    -- end
+            on_update()
+        end
+    end
 end
 
 G.FUNCS.updater_update_bvs = function()
