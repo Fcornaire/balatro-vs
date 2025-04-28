@@ -81,6 +81,9 @@ There are no bosses and tag but might come in a certain way
 
 To make the mods more fun and interactive, some additional 'disruptive' jokers and consumeables have been added. Their goal is to limit or hinder your opponent's play options.
 
+> [!NOTE]  
+> I'm not an artist, those cards are blank for now .
+
 > [!IMPORTANT]  
 > Potential balance changes may happen to them in the future.
 

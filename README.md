@@ -30,6 +30,8 @@ More info at [How 2 play](./HOW2PLAY.MD) (this will probably move to the wiki at
 
 This mod has only been developed and tested on windows, probably won't work on other platform (but might happen in the future ?)
 
+Also this mod was developed for the 1.0.X version, meaning it will break when an official major update drop (will need some adjustements).
+
 Before starting, i suggest to make a backup of your current save file just in case. You can find your saves in your computer at `%AppData%/Balatro` with folder 1 to 3 being the profiles and the `settings.jkr` file being the current game settings (`steam_autocloud.vdf` is probably some steam related stuff, i think it can be ignored). Copy those somewhere to backup if needed for some reason
 
 This mod run with [lovely-injector](https://github.com/ethangreen-dev/lovely-injector) (tested on version v0.7.1):
@@ -42,8 +44,7 @@ This mod run with [lovely-injector](https://github.com/ethangreen-dev/lovely-inj
 
 - Copy the `winmm.dll` file to your balatro game folder
 
-> [!IMPORTANT]
-> **Respect the mod architecture.**  
+> [!IMPORTANT] > **Respect the mod architecture.**  
 > **winmm.dll** file goes to your balatro game folder (something like `.../Steam/steamapps/common/Balatro`).
 >
 > **balatro-vs** folder goes to lovely `Mods` folder at `%AppData%/Balatro/Mods`.
