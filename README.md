@@ -44,7 +44,8 @@ This mod run with [lovely-injector](https://github.com/ethangreen-dev/lovely-inj
 
 - Copy the `winmm.dll` file to your balatro game folder
 
-> [!IMPORTANT] > **Respect the mod architecture.**  
+> [!IMPORTANT]
+> **Respect the mod architecture.**  
 > **winmm.dll** file goes to your balatro game folder (something like `.../Steam/steamapps/common/Balatro`).
 >
 > **balatro-vs** folder goes to lovely `Mods` folder at `%AppData%/Balatro/Mods`.
