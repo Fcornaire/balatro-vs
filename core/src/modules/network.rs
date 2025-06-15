@@ -38,6 +38,7 @@ pub enum NetworkEvent {
     Cashout(i32),
     Ping(),
     Pong(),
+    Rematch(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -54,6 +55,8 @@ pub enum NetworkState {
     WaitForUserAction,
     WaitForOpponent(GameManipulationEvent),
     OpponentWaitingForYou,
+    WaitingForRematchResponse,
+    OpponentRematched,
 }
 
 pub struct Network {
@@ -637,6 +640,37 @@ impl Network {
         true
     }
 
+    pub fn rematch(&mut self, game_manipulation: &mut GameManipulation) -> bool {
+        debug!("[Network] Network_rematch");
+
+        if let Some(peer) = &self.opponent {
+            match self.state {
+                NetworkState::OpponentRematched => {
+                    game_manipulation.register_event(GameManipulationEvent::OnRematch);
+                    self.state = NetworkState::WaitForUserAction;
+                }
+                _ => {
+                    game_manipulation.regenerate_seed();
+                    self.state = NetworkState::WaitingForRematchResponse;
+                    game_manipulation
+                        .register_event(GameManipulationEvent::OnWaitingForRematchResponse);
+                }
+            }
+
+            let event = NetworkEvent::Rematch(game_manipulation.get_seed());
+            let packet = serialize(&event).unwrap().into_boxed_slice();
+
+            let mut socket = get_ws().unwrap().lock().unwrap();
+            let socket = socket.as_mut().unwrap();
+            socket.channel_mut(0).send(packet, *peer);
+
+            return true;
+        }
+
+        warn!("[Network] Network_rematch : No opponent found");
+        false
+    }
+
     pub fn on_messages_received(
         &mut self,
         game_manipulation: &mut GameManipulation,
@@ -967,6 +1001,21 @@ impl Network {
                     }
                     _ => {
                         warn!("[Network] Wrong state {:?} for Cashout", self.state);
+                    }
+                }
+            }
+            NetworkEvent::Rematch(seed) => {
+                info!("[Network] Opponent rematch request");
+                match self.state {
+                    NetworkState::WaitingForRematchResponse => {
+                        self.state = NetworkState::WaitForUserAction;
+                        game_manipulation.register_event(GameManipulationEvent::OnRematch);
+                    }
+                    _ => {
+                        self.state = NetworkState::OpponentRematched;
+                        game_manipulation.set_seed(seed);
+                        game_manipulation
+                            .register_event(GameManipulationEvent::OnOpponentRematched);
                     }
                 }
             }

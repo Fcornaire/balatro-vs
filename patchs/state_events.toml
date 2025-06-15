@@ -344,8 +344,17 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
     if G.GAME.opponent_chips > G.GAME.chips then
         G.GAME.opponent_round_won = G.GAME.opponent_round_won + 1
         if BALATRO_VS_CTX and BALATRO_VS_CTX.main_goal and G.GAME.opponent_round_won >= BALATRO_VS_CTX.main_goal then
-            G.STATE = G.STATES.GAME_OVER
-            G.STATE_COMPLETE = false
+            G.E_MANAGER:add_event(Event({
+                    trigger = 'after',
+                    delay = 6,
+                    func = 
+                        function()
+                            G.STATE = G.STATES.GAME_OVER
+                            G.STATE_COMPLETE = false
+                            return true
+                        end
+                }))
+
         end
     elseif G.GAME.opponent_chips < G.GAME.chips then
         G.GAME.round_won = G.GAME.round_won + 1
@@ -363,6 +372,8 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
             }))
         end
     end
+
+    G.FUNCS.game_manipulation_acknowledge_event()
 end
 
 '''

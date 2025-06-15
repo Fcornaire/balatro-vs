@@ -43,6 +43,9 @@ pub enum GameManipulationEvent {
     OpponentCashOut(i32),
     WaitForOpponentAction,
     UpdateMessage(String),
+    OnRematch,
+    OnOpponentRematched,
+    OnWaitingForRematchResponse,
 }
 
 pub struct GameManipulation {
@@ -309,6 +312,15 @@ impl GameManipulation {
                 }
                 GameManipulationEvent::OpponentCashOut(_) => {
                     //This event is handled immediately at register; nothing to do here
+                }
+                GameManipulationEvent::OnRematch => {
+                    execute_lua_function_with_args!("on_rematch", (self.get_seed(), String));
+                }
+                GameManipulationEvent::OnOpponentRematched => {
+                    call_lua_function!("on_opponent_rematched");
+                }
+                GameManipulationEvent::OnWaitingForRematchResponse => {
+                    call_lua_function!("on_waiting_for_rematch_response");
                 }
             }
         }

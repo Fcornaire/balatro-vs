@@ -285,6 +285,7 @@ BALATRO_VS_CTX = {
         rtt = "0 ms",
         should_reset = false,
         has_opponent_maestro_and_highlighted_cards = false,
+        is_rematch_requested = false,
     },
     is_in_shop_and_ready = false,
     alignements = {

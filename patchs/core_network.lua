@@ -229,7 +229,7 @@ function on_random_start(seed)
             BALATRO_VS_CTX.network.is_live = true
             backup_progress()
             G.F_NO_SAVING = true
-            G.FUNCS.start_run(e, { stake = 1, seed = seed, challenge = nil })
+            G.FUNCS.start_run(nil, { stake = 1, seed = seed, challenge = nil })
             return true
         end
     }))
@@ -1069,10 +1069,28 @@ function on_opponent_disconnected_from_found()
 end
 
 function on_opponent_disconnected_in_game()
-    --Ignore if game over or won
-    if G.STATE == G.STATES.GAME_OVER or G.GAME.won then return end
-
     end_network()
+
+    --Ignore if game over or won
+    if G.STATE == G.STATES.GAME_OVER or G.GAME.won then
+        if BALATRO_VS_CTX.network.is_rematch_requested then
+            -- Tell the player that the opponent disconnected
+
+            Jimbo = Card_Character({ x = 0, y = 5 })
+            local spot = G.OVERLAY_MENU:get_UIE_by_ID('jimbo_versus_spot')
+            spot.config.object:remove()
+            spot.config.object = Jimbo
+            Jimbo.ui_object_updated = true
+            Jimbo:add_speech_bubble('b_versus_opponent_rematched_declined', nil, { quip = true })
+            Jimbo:say_stuff(5)
+        end
+
+        BALATRO_VS_CTX.network.is_rematch_requested = true -- This is to prevent player to try to rematch when the opponent disconnected
+
+        return
+    end
+
+    BALATRO_VS_CTX.network.is_rematch_requested = true -- This is to prevent player to try to rematch when the opponent disconnected
 
     play_sound('negative', 1)
     G.SETTINGS.paused = true
@@ -1096,6 +1114,43 @@ function on_opponent_disconnected_in_game()
     }
 end
 
+function network_on_rematch()
+    if network_rematch then
+        bvs_debug("Network rematch requested")
+        network_rematch()
+    end
+end
+
+function on_waiting_for_rematch_response()
+    BALATRO_VS_CTX.network.is_rematch_requested = true
+end
+
+function on_rematch(seed)
+    bvs_debug("Rematch requested with seed: " .. seed)
+    BALATRO_VS_CTX.network.is_rematch_requested = false
+    G:delete_run()
+
+    -- Restore original render scale
+    G.TILE_W = ORIG_RENDER_SCALE.TILE_W
+    G.TILE_H = ORIG_RENDER_SCALE.TILE_H
+    G.TILESCALE = ORIG_RENDER_SCALE.TILESCALE
+
+    G.FUNCS.start_run(nil, { stake = 1, seed = seed, challenge = nil })
+    on_create_timer(45, 'on_wait_for_user_action_over')
+end
+
+function on_opponent_rematched()
+    bvs_debug("Opponent rematched")
+    local Jimbo = nil
+    Jimbo = Card_Character({ x = 0, y = 5 })
+    local spot = G.OVERLAY_MENU:get_UIE_by_ID('jimbo_versus_spot')
+    spot.config.object:remove()
+    spot.config.object = Jimbo
+    Jimbo.ui_object_updated = true
+    Jimbo:add_speech_bubble('b_versus_opponent_rematched', nil, { quip = true })
+    Jimbo:say_stuff(5)
+end
+
 function end_network()
     if BALATRO_VS_CTX.network.is_live then
         BALATRO_VS_CTX.network.is_live = false
@@ -1107,5 +1162,6 @@ function end_network()
         BALATRO_VS_CTX.timer:stop()
         BALATRO_VS_CTX.timer = nil
     end
+
     G.opp_ext_code = ''
 end

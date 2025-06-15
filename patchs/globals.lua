@@ -2348,3 +2348,32 @@ function opponent_set_consumeable_usage(card)
         end
     end
 end
+
+G.FUNCS.on_rematch = function()
+    network_on_rematch()
+end
+
+
+G.FUNCS.is_rematch_active = function(e)
+    if BALATRO_VS_CTX then
+        if BALATRO_VS_CTX.network.is_rematch_requested then
+            e.config.colour = G.C.UI.BACKGROUND_INACTIVE
+            e.config.button = nil
+        end
+    end
+end
+
+G.FUNCS.can_go_to_main_menu = function(e)
+    if BALATRO_VS_CTX then
+        if BALATRO_VS_CTX.network.is_rematch_requested and BALATRO_VS_CTX.network.is_live then
+            e.config.old_colour = e.config.colour
+            e.config.colour = G.C.UI.BACKGROUND_INACTIVE
+            e.config.button = nil
+        end
+
+        if BALATRO_VS_CTX.network.is_rematch_requested and not BALATRO_VS_CTX.network.is_live then
+            e.config.colour = G.C.RED
+            e.config.button = "go_to_menu"
+        end
+    end
+end
