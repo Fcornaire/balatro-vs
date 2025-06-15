@@ -528,6 +528,7 @@ if BALATRO_VS_CTX then
     G.TILESCALE = ORIG_RENDER_SCALE.TILESCALE
 
     end_network()
+    BALATRO_VS_CTX.network.is_rematch_requested = false
 
     --Also restore the original progress
     if BALATRO_VS_CTX.progress then

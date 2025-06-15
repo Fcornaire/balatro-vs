@@ -567,7 +567,9 @@ payload = '''
 not (BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live) and
   {n=G.UIT.R, config={align = "cm", padding = 0.08}, nodes={
     UIBox_button({button = 'exit_overlay_menu', label = {localize('b_endless')}, minw = 6.5, maxw = 5, minh = 1.2, scale = 0.7, shadow = true, colour = G.C.BLUE, focus_args = {nav = 'wide', button = 'x',set_button_pip = true}}),
-  }} or nil,
+  }} or {n=G.UIT.R, config={align = "cm", padding = 0.08}, nodes={
+      UIBox_button({button = 'on_rematch', func = 'is_rematch_active', label = {localize('b_versus_rematch')}, minw = 6.5, maxw = 5, minh = 1.2, scale = 0.7, shadow = true, colour = G.C.BLUE, focus_args = {nav = 'wide', button = 'x',set_button_pip = true}}),
+    }},
 '''
 match_indent = true
 times = 1
@@ -586,6 +588,68 @@ not (BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live) and
 match_indent = true
 times = 1
 
+
+#create_uiBox_win: Add a jimbo spot for versus texts
+[[patches]]
+[patches.pattern]
+target = "functions/UI_definitions.lua"
+pattern = '''{n=G.UIT.C, config={align = "cm", padding = 2}, nodes={
+        {n=G.UIT.O, config={padding = 0, id = 'jimbo_spot', object = Moveable(0,0,G.CARD_W*1.1, G.CARD_H*1.1)}},
+      }},'''
+position = "after"
+payload = '''
+{n=G.UIT.R, config={align = "cm", padding = 2}, nodes={
+        {n=G.UIT.O, config={padding = 0, id = 'jimbo_versus_spot', object = Moveable(0,0,G.CARD_W*1.1, G.CARD_H*1.1)}},
+      }},
+'''
+match_indent = true
+times = 1
+
+
+#create_uiBox_win: Check if we are rematching
+[[patches]]
+[patches.pattern]
+target = "functions/UI_definitions.lua"
+pattern = '''not show_win_cta and UIBox_button({button = 'go_to_menu', label = {localize('b_main_menu')}, minw = 2.5, maxw = 2.5, minh = 1, focus_args = {nav = 'wide'}}) or nil,'''
+position = "at"
+payload = '''
+not show_win_cta and UIBox_button({button = 'go_to_menu', func = 'can_go_to_main_menu', label = {localize('b_main_menu')}, minw = 2.5, maxw = 2.5, minh = 1, focus_args = {nav = 'wide'}}) or nil,
+'''
+match_indent = true
+times = 1
+
+
+#create_uiBox_game_over: Check if we are rematching
+[[patches]]
+[patches.pattern]
+target = "functions/UI_definitions.lua"
+pattern = '''{n=G.UIT.R, config={align = "cm", minw = 5, padding = 0.1, r = 0.1, hover = true, colour = G.C.RED, button = "go_to_menu", shadow = true, focus_args = {nav = 'wide'}}, nodes={'''
+position = "at"
+payload = '''
+{n=G.UIT.R, config={align = "cm", minw = 5, padding = 0.1, r = 0.1, hover = true, colour = G.C.RED, button = "go_to_menu", func = 'can_go_to_main_menu', shadow = true, focus_args = {nav = 'wide'}}, nodes={
+'''
+match_indent = true
+times = 1
+
+#create_uiBox_game_over: Add a jimbo spot for versus texts
+[[patches]]
+[patches.pattern]
+target = "functions/UI_definitions.lua"
+pattern = '''{n=G.UIT.C, config={align = "cm", padding = 2}, nodes={
+      {n=G.UIT.R, config={align = "cm"}, nodes={
+        {n=G.UIT.O, config={padding = 0, id = 'jimbo_spot', object = Moveable(0,0,G.CARD_W*1.1, G.CARD_H*1.1)}},
+      }},
+    }},'''
+position = "after"
+payload = '''
+{n=G.UIT.R, config={align = "cm", padding = 2}, nodes={
+        {n=G.UIT.O, config={padding = 0, id = 'jimbo_versus_spot', object = Moveable(0,0,G.CARD_W*1.1, G.CARD_H*1.1)}},
+      }},
+'''
+match_indent = true
+times = 1
+
+
 #create_uiBox_game_over: No new game on netplay
 [[patches]]
 [patches.pattern]
@@ -603,7 +667,9 @@ not (BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live) and
               {n=G.UIT.T, config={text = localize('b_start_new_run'), scale = 0.5, colour = G.C.UI.TEXT_LIGHT}}
             }}
           }} 
-or nil,
+or {n=G.UIT.R, config={align = "cm", padding = 0.08}, nodes={
+      UIBox_button({button = 'on_rematch', func = 'is_rematch_active', label = {localize('b_versus_rematch')}, minw = 6.5, maxw = 5, minh = 1.2, scale = 0.7, shadow = true, colour = G.C.BLUE, focus_args = {nav = 'wide', button = 'x',set_button_pip = true}}),
+    }},
 '''
 match_indent = true
 times = 1

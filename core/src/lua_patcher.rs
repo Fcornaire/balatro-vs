@@ -267,5 +267,9 @@ impl LuaPatcher {
                 .unwrap()
                 .network_send_cash_out(to_send, is_ending_shop)
         });
+
+        self.register_lua_function("network_rematch", |_, ()| {
+            get_modules().lock().unwrap().network_rematch()
+        });
     }
 }

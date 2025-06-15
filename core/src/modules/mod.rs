@@ -406,4 +406,17 @@ impl Modules {
 
         Ok(())
     }
+
+    pub fn network_rematch(&mut self) -> Result<()> {
+        let res = self.network.rematch(&mut self.game_manipulation);
+
+        if !res {
+            error!("[Modules] Failed to send rematch request");
+            return Err(mlua::Error::RuntimeError(
+                "Failed to send rematch request".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
 }
