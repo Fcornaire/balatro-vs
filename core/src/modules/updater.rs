@@ -172,7 +172,7 @@ impl Updater {
             extract_path = extract_path.display()
         );
 
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(not(target_os = "windows"))]
         let script_content = format!(
             r#"
                 #!/bin/bash
@@ -203,7 +203,7 @@ impl Updater {
         let mut file = std::fs::File::create(&script_path).unwrap();
         file.write_all(script_content.as_bytes()).unwrap();
 
-        #[cfg(target_os = "linux")]
+        #[cfg(not(target_os = "windows"))]
         Command::new("chmod")
             .arg("+x")
             .arg(&script_path)

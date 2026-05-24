@@ -54,6 +54,14 @@ payload = '''
 
 IS_DEV = false --TODO: confg file
 
+function get_bvs_json(...) --Android specific
+    if love.filesystem.getInfo("bvs.json") then
+        return love.filesystem.read("bvs.json")
+    else
+        return nil
+    end
+end
+
 local lurker = nil 
 lume = require('rxi-lume')
 

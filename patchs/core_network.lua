@@ -217,12 +217,19 @@ function on_random_found()
     }
 end
 
+started = false
 function on_random_start(seed)
     print("Start match with seed: " .. seed)
     G.E_MANAGER:add_event(Event({
         trigger = 'immediate',
         no_delete = true,
         func = function()
+            if started then --Because wtf is even happening on android...
+                print("Ignoring duplicate start event")
+                return true
+            end
+            started = true
+
             G.SETTINGS.GAMESPEED = 4
             G.SETTINGS.tutorial_complete = true
             G.FUNCS.network_wait_for_next_action()
@@ -1164,4 +1171,5 @@ function end_network()
     end
 
     G.opp_ext_code = ''
+    started = false
 end

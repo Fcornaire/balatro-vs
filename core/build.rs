@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+#[cfg(target_os = "windows")]
 fn main() {
     println!("cargo:rerun-if-changed=NULL");
 
@@ -46,6 +47,9 @@ fn main() {
         );
     }
 }
+
+#[cfg(not(target_os = "windows"))]
+fn main() {}
 
 fn copy_patches(to_copy: ReadDir, target_path: String, target_dir: String) {
     fs::create_dir_all(format!("{}{}", target_dir, target_path)).unwrap();

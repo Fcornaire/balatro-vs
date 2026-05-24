@@ -7,42 +7,53 @@ use matchbox_socket::WebRtcSocket;
 use modules::bvs::BvsConfig;
 use modules::Modules;
 use once_cell::sync::OnceCell;
-use retour::static_detour;
 use std::ffi::c_void;
 use std::fs;
 use std::sync::atomic::AtomicPtr;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, error, warn};
-use windows::core::{s, w};
-use windows::Win32::Foundation::HINSTANCE;
-use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
 use mlua::lua_State;
 
 pub fn get_bvs_config() -> &'static Arc<BvsConfig> {
     static INSTANCE: OnceCell<Arc<BvsConfig>> = OnceCell::new();
     INSTANCE.get_or_init(|| {
-        if let Some(app_data_dir) = dirs::data_dir() {
-            let mod_folder = app_data_dir
-                .join("Balatro")
-                .join("Mods")
-                .join("balatro-vs")
-                .join("lovely");
+        #[cfg(any(target_os = "windows"))]
+        {
+            if let Some(app_data_dir) = dirs::data_dir() {
+                let mod_folder = app_data_dir
+                    .join("Balatro")
+                    .join("Mods")
+                    .join("balatro-vs")
+                    .join("lovely");
 
-            let config_path = mod_folder.join("bvs.json");
-            if let Ok(config_content) = fs::read_to_string(config_path) {
-                match serde_json::from_str::<BvsConfig>(&config_content) {
-                    Ok(config) => return Arc::new(config),
-                    Err(e) => {
-                        panic!("[bvs_config] Failed to parse config: {:?}", e);
+                let config_path = mod_folder.join("bvs.json");
+                if let Ok(config_content) = fs::read_to_string(config_path) {
+                    match serde_json::from_str::<BvsConfig>(&config_content) {
+                        Ok(config) => return Arc::new(config),
+                        Err(e) => {
+                            panic!("[bvs_config] Failed to parse config: {:?}", e);
+                        }
                     }
+                } else {
+                    panic!("[bvs_config] Could not read config file");
                 }
-            } else {
-                panic!("[bvs_config] Could not read config file");
             }
+            panic!("[bvs_config] Could not find app data directory");
         }
 
-        panic!("[bvs_config] Could not find app data directory")
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            use crate::macros::macros::execute_lua_function_with_result;
+
+            let bvs_conf = execute_lua_function_with_result!("get_bvs_json", String);
+            match serde_json::from_str::<BvsConfig>(&bvs_conf) {
+                Ok(config) => return Arc::new(config),
+                Err(e) => {
+                    panic!("[bvs_config] Failed to parse config: {:?}", e);
+                }
+            }
+        }
     })
 }
 
@@ -171,47 +182,77 @@ pub fn reset_ws() {
     debug!("[Network] WS Socket reset");
 }
 
-static_detour! {
-    pub static LuaLNewState_Detour: unsafe extern "C" fn() -> *mut lua_State;
-}
+#[cfg(target_os = "windows")]
+mod windows_symbols {
+    use super::*;
+    use retour::static_detour;
+    use windows::core::{s, w};
+    use windows::Win32::Foundation::HINSTANCE;
+    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
-unsafe extern "C" fn lua_newstatex_detour() -> *mut lua_State {
-    debug!("New lua state to hook!");
-
-    let state = LuaLNewState_Detour.call();
-    add_lua_state_ptr(AtomicPtr::new(state));
-
-    let patcher = LuaPatcher::new(state);
-    patcher.patch_lua_state();
-
-    state
-}
-
-#[no_mangle]
-#[allow(non_snake_case)]
-unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -> u8 {
-    if reason != 1 {
-        return 1;
+    static_detour! {
+        pub static LuaLNewState_Detour: unsafe extern "C" fn() -> *mut lua_State;
     }
 
-    tracing_subscriber::fmt()
-        .compact()
-        .with_thread_names(true)
-        .with_target(true)
-        .with_max_level(tracing::Level::INFO)
-        .with_ansi(false) // lovely console doesn't support ANSI ¯\_(ツ)_/¯
-        .init();
+    unsafe extern "C" fn lua_newstatex_detour() -> *mut lua_State {
+        debug!("New lua state to hook!");
 
-    let handle = LoadLibraryW(w!("lua51.dll")).unwrap();
-    let proc_newstate = GetProcAddress(handle, s!("luaL_newstate")).unwrap();
-    let fn_target_newstate =
-        std::mem::transmute::<_, unsafe extern "C" fn() -> *mut lua_State>(proc_newstate);
+        let state = LuaLNewState_Detour.call();
+        add_lua_state_ptr(AtomicPtr::new(state));
 
-    LuaLNewState_Detour
-        .initialize(fn_target_newstate, || lua_newstatex_detour())
-        .unwrap()
-        .enable()
-        .unwrap();
+        let patcher = LuaPatcher::new(state);
+        patcher.patch_lua_state();
 
-    1
+        state
+    }
+
+    #[cfg(target_os = "windows")]
+    #[no_mangle]
+    #[allow(non_snake_case)]
+    unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -> u8 {
+        if reason != 1 {
+            return 1;
+        }
+
+        tracing_subscriber::fmt()
+            .compact()
+            .with_thread_names(true)
+            .with_target(true)
+            .with_max_level(tracing::Level::INFO)
+            .with_ansi(false) // lovely console doesn't support ANSI ¯\_(ツ)_/¯
+            .init();
+
+        let handle = LoadLibraryW(w!("lua51.dll")).unwrap();
+        let proc_newstate = GetProcAddress(handle, s!("luaL_newstate")).unwrap();
+        let fn_target_newstate =
+            std::mem::transmute::<_, unsafe extern "C" fn() -> *mut lua_State>(proc_newstate);
+
+        LuaLNewState_Detour
+            .initialize(fn_target_newstate, || lua_newstatex_detour())
+            .unwrap()
+            .enable()
+            .unwrap();
+
+        1
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod linux_symbols {
+    use super::*;
+
+    #[no_mangle]
+    pub unsafe extern "C" fn luaopen_winmm(lua: *mut lua_State) -> i32 {
+        tracing_subscriber::fmt()
+            .compact()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_ansi(false)
+            .init();
+
+        add_lua_state_ptr(AtomicPtr::new(lua));
+        let patcher = LuaPatcher::new(lua);
+        patcher.patch_lua_state();
+
+        1
+    }
 }
