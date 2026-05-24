@@ -24,6 +24,15 @@ impl Server {
     pub fn get_path(&self) -> String {
         self.path.clone()
     }
+
+    pub fn new(protocol: String, host: String, port: u16, path: String) -> Self {
+        Self {
+            protocol,
+            host,
+            port,
+            path,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -33,6 +42,10 @@ pub struct BvsConfig {
 }
 
 impl BvsConfig {
+    pub fn new(version: String, server: Server) -> Self {
+        Self { version, server }
+    }
+
     pub fn get_version(&self) -> String {
         self.version.clone()
     }
