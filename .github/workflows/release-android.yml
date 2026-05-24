@@ -1,0 +1,60 @@
+name: Release Android
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the android build to (e.g. 0.2.0)"
+        required: true
+        type: string
+
+jobs:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: core/Cargo.toml
+
+      - name: Install cross
+        uses: taiki-e/install-action@cross
+
+      - name: Update integrity
+        run: |
+          echo '#[cfg(feature = "with_integrity")]
+              pub fn get_integrity_hash() -> String {
+                  "${{ secrets.INTEGRITY_HASH }}".to_string()
+              }
+          ' > core/src/modules/integrity.rs
+          echo 'Updated with integrity hash!'
+
+      - name: Build
+        working-directory: core
+        run: cross build --target aarch64-linux-android --features with_integrity --release
+
+      - name: Set version
+        run: echo "VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}" >> $GITHUB_ENV
+
+      - name: Archive
+        run: zip -j bvs-${{ env.VERSION }}-android.zip core/target/aarch64-linux-android/release/libwinmm.so
+
+      - name: Upload Release
+        uses: ncipollo/release-action@v1.12.0
+        with:
+          artifacts: "bvs-${{ env.VERSION }}-android.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ env.VERSION }}
+          allowUpdates: true
+          omitBodyDuringUpdate: true
+          omitNameDuringUpdate: true
