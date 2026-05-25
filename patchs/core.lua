@@ -1,7 +1,7 @@
 require("balatro-vs_globals")
-require("balatro-vs_network")
-InteractionContext = require("balatro-vs_interaction").InteractionContext
-Interaction = require("balatro-vs_interaction").Interaction
+require("balatro-vs_core_network")
+InteractionContext = require("balatro-vs_core_interaction").InteractionContext
+Interaction = require("balatro-vs_core_interaction").Interaction
 
 --Timer related
 local EventTimer = require("balatro-vs_utils").EventTimer

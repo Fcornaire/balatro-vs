@@ -253,6 +253,6 @@ mod linux_symbols {
         let patcher = LuaPatcher::new(lua);
         patcher.patch_lua_state();
 
-        1
+        0
     }
 }

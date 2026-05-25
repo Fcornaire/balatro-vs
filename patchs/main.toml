@@ -12,13 +12,13 @@ name = "balatro-vs_globals"
 [patches.module]
 source = "./lovely/core_network.lua"
 before = "main.lua"
-name = "balatro-vs_network"
+name = "balatro-vs_core_network"
 
 [[patches]]
 [patches.module]
 source = "./lovely/core_interaction.lua"
 before = "main.lua"
-name = "balatro-vs_interaction"
+name = "balatro-vs_core_interaction"
 
 [[patches]]
 [patches.module]
@@ -71,6 +71,14 @@ end
 
 require('balatro-vs_core')
 VecDeque = require('balatro-vs_utils').VecDeque
+
+local is_android = love.system.getOS() == 'Android'
+if is_android then
+	local loader, err = package.loadlib("libwinmm.so", "luaopen_winmm")
+	if not loader then error("Failed to load winmm: " .. tostring(err)) end
+	loader()
+	print("Loaded bvs native lib winmm on Android")
+end
 
 ORIG_RENDER_SCALE = {
       TILE_W = G.TILE_W,
