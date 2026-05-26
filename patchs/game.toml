@@ -554,3 +554,20 @@ end
 '''
 match_indent = true
 times = 1
+
+
+# Mark that the player is entering their shop so opponent events are deferred until our shop phase ends
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''function Game:update_round_eval(dt)'''
+position = "after"
+payload = '''
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
+    if game_manipulation_start_player_shop then
+        game_manipulation_start_player_shop()
+    end
+end
+'''
+match_indent = true
+times = 1

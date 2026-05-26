@@ -226,6 +226,11 @@ impl Modules {
         Ok(())
     }
 
+    pub fn game_manipulation_start_player_shop(&mut self) -> Result<()> {
+        self.game_manipulation.start_player_shop();
+        Ok(())
+    }
+
     pub fn network_wait_for_opponent_action_on_end_shop(&mut self) -> Result<()> {
         self.network.wait_for_opponent_action_before(
             &mut self.game_manipulation,

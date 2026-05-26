@@ -181,6 +181,13 @@ impl LuaPatcher {
                 .game_manipulation_acknowledge_event()
         });
 
+        self.register_lua_function("game_manipulation_start_player_shop", |_, ()| {
+            get_modules()
+                .lock()
+                .unwrap()
+                .game_manipulation_start_player_shop()
+        });
+
         self.register_lua_function("network_send_new_card", |_, card_conf| {
             get_modules()
                 .lock()
