@@ -502,6 +502,8 @@ impl Network {
                 game_manipulation.acknowledge_event();
 
                 if let GameManipulationEvent::ProcessRemainingEvents = &(game_event.clone()) {
+                    game_manipulation.end_player_shop();
+
                     game_manipulation.register_event(GameManipulationEvent::UpdateMessage(
                         "Playing opponent shop choices".to_string(),
                     ));
@@ -861,6 +863,8 @@ impl Network {
 
                         if let GameManipulationEvent::ProcessRemainingEvents = &(game_event.clone())
                         {
+                            game_manipulation.end_player_shop();
+
                             game_manipulation.register_event(GameManipulationEvent::UpdateMessage(
                                 "Playing opponent shop choices".to_string(),
                             ));

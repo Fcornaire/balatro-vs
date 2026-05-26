@@ -53,6 +53,7 @@ pub struct GameManipulation {
     event_queue: VecDeque<GameManipulationEvent>,
     is_ack_needed: bool,
     is_timer_ack_needed: bool,
+    is_player_shopping: bool,
     last_network_state: NetworkState,
 }
 
@@ -64,9 +65,18 @@ impl GameManipulation {
             seed,
             is_ack_needed: false,
             is_timer_ack_needed: false,
+            is_player_shopping: false,
             event_queue: VecDeque::new(),
             last_network_state: NetworkState::Idle,
         }
+    }
+
+    pub fn start_player_shop(&mut self) {
+        self.is_player_shopping = true;
+    }
+
+    pub fn end_player_shop(&mut self) {
+        self.is_player_shopping = false;
     }
 
     pub fn set_seed(&mut self, seed: String) {
@@ -173,6 +183,10 @@ impl GameManipulation {
     //TODO: Remove unhandled events when those are processed right away
     pub fn process_events(&mut self) {
         if self.is_ack_needed {
+            return;
+        }
+
+        if self.is_player_shopping {
             return;
         }
 
