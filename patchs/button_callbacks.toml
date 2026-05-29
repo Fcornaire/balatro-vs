@@ -206,13 +206,12 @@ times = 1
 #...to use the correct functions (consumeables and joker calculation) if it's the opponent
 #Also use the correct effect for online cards
 #Also, handle online interaction for using consumeable
+#Updated pattern for SMODS compatibility: SMODS added calculate_context 
 [[patches]]
 [patches.pattern]
 target = "functions/button_callbacks.lua"
 pattern = '''e.config.ref_table:use_consumeable(area)
-      for i = 1, #G.jokers.cards do
-        G.jokers.cards[i]:calculate_joker({using_consumeable = true, consumeable = card})
-      end'''
+      SMODS.calculate_context({using_consumeable = true, consumeable = card, area = card.from_area})'''
 position = "at"
 payload = '''
     if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_online_card(e.config.ref_table.ability.name) then
@@ -238,9 +237,7 @@ payload = '''
                 delay = 1.5,
                 func = function()
                     e.config.ref_table:use_consumeable(area)
-                    for i = 1, #G.jokers.cards do
-                        G.jokers.cards[i]:calculate_joker({using_consumeable = true, consumeable = card})
-                    end
+                    SMODS.calculate_context({using_consumeable = true, consumeable = card, area = card.from_area})
                     return true
                 end
             }))
@@ -293,19 +290,6 @@ if is_opponent then
 else
     G.FUNCS.end_consumeable(nil, delay_fac)
 end 
-'''
-match_indent = true
-times = 1
-
-
-#Use_Card: When using a card, if it's the opponent, we don't want to end the pack choice
-[[patches]]
-[patches.pattern]
-target = "functions/button_callbacks.lua"
-pattern = '''if area == G.consumeables then'''
-position = "at"
-payload = '''
-if area == G.consumeables or area == G.opponent_consumeables then
 '''
 match_indent = true
 times = 1
@@ -481,12 +465,11 @@ times = 1
 
 # toggle_shop
 #Trigger joker calculation for opponent when ending shop
+# Updated pattern for SMODS compatibility: SMODS added calculate_context
 [[patches]]
 [patches.pattern]
 target = "functions/button_callbacks.lua"
-pattern = '''for i = 1, #G.jokers.cards do
-        G.jokers.cards[i]:calculate_joker({ending_shop = true})
-      end'''
+pattern = '''SMODS.calculate_context({ending_shop = true})'''
 position = "after"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
@@ -586,13 +569,14 @@ match_indent = true
 times = 1
 
 # can_skip_booster: Prevent player being able to skip opponent booster
+# Updated pattern for SMODS compatibility: SMODS added STOP_USE
 [[patches]]
 [patches.pattern]
 target = "functions/button_callbacks.lua"
-pattern = '''if G.pack_cards and (G.pack_cards.cards[1]) and'''
+pattern = '''if G.pack_cards and (not (G.GAME.STOP_USE and G.GAME.STOP_USE > 0)) and'''
 position = "after"
 payload = '''
-(not BALATRO_VS_CTX or not BALATRO_VS_CTX.network.is_live or (BALATRO_VS_CTX.network.is_live and not G.pack_cards.cards[1].params.is_opponent)) and
+(not BALATRO_VS_CTX or not BALATRO_VS_CTX.network.is_live or (BALATRO_VS_CTX.network.is_live and (not G.pack_cards.cards[1] or not G.pack_cards.cards[1].params.is_opponent))) and
 '''
 match_indent = true
 times = 1

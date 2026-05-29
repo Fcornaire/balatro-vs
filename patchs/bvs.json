@@ -1,8 +1,14 @@
 {
+  "id": "DShad-BalatroVS",
   "name": "Balatro-vs²",
-  "version": "0.3.0",
+  "display_name": "BVS",
+  "author": ["DShad"],
   "description": "Balatro-vs is a network versus mod for Balatro",
-  "author": "DShad",
+  "prefix": "bvs",
+  "main_file": "core.lua",
+  "version": "0.3.0",
+  "badge_colour": "1A5EBF",
+  "dependencies": ["Steamodded (>=1.0.0~)"],
   "server": {
     "protocol": "ws",
     "host": "localhost",

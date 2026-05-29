@@ -16,7 +16,7 @@ local function custom_pseudoshuffle(array, seed)
     end
 end
 
-local function custom_copy_table(tbl)
+function custom_copy_table(tbl)
     local copy = {}
     for k, v in pairs(tbl) do
         if type(v) == "function" then
@@ -31,7 +31,6 @@ local function custom_copy_table(tbl)
     end
     return copy
 end
-
 
 local function common_on_card_click(owner, interaction_context) -- Common function for on_card_click
     if next(interaction_context.target.children) == nil then

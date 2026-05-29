@@ -34,6 +34,16 @@ G.FUNCS.versus_is_up_to_date = function(e)
             return
         end
 
+        if SMODS == nil then
+            e.config.colour = G.C.UI.BACKGROUND_INACTIVE
+            e.config.button = nil
+            if not BALATRO_VS_CTX.network.smods_missing_shown then
+                BALATRO_VS_CTX.network.smods_missing_shown = true
+                on_smods_required()
+            end
+            return
+        end
+
         if updater_check_for_update and not updater_check_for_update() then
             e.config.colour = G.C.UI.BACKGROUND_INACTIVE
             e.config.button = nil
@@ -206,7 +216,34 @@ G.FUNCS.vs_main_menu = function()
                                             n = G.UIT.ROOT,
                                             config = { align = "cm", padding = 0.2, colour = G.C.BLACK, r = 0.1, emboss = 0.05, minh = 6, minw = 6 },
                                             nodes = {
-                                                UIBox_button { id = 'vs-srv', button = "versus_matchmaking_start", colour = G.C.PURPLE, minw = 2.65, minh = 1.35, label = { localize('b_versus_matchmaking') }, scale = 2.2, col = true },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", padding = 0.05 },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "Warning: any non-cosmetic mod may break this mod.", scale = 0.4, colour = G.C.RED, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", padding = 0.05 },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "Even some cosmetic mods might cause issues.", scale = 0.4, colour = G.C.RED, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", padding = 0.15 },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "It is advised to play random or friendlies without any other mods.", scale = 0.4, colour = G.C.YELLOW, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm" },
+                                                    nodes = {
+                                                        UIBox_button { id = 'vs-srv', button = "versus_matchmaking_start", colour = G.C.PURPLE, minw = 2.65, minh = 1.35, label = { localize('b_start_versus_matchmaking') }, scale = 2.2, col = true },
+                                                    }
+                                                },
                                             }
                                         }
                                     end
