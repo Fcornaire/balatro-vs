@@ -183,10 +183,11 @@ times = 1
 # CardArea(hand) might be frozen because of the turn play animation
 # we unlock it at the very end, at least when the draw is over
 # to prevent desycnhronized events
+# Pattern updated for SMODS compatibility: SMODS added cards_to_draw
 [[patches]]
 [patches.pattern]
 target = "functions/state_events.lua"
-pattern = '''draw_card(G.deck,G.hand, i*100/hand_space,'up', true)
+pattern = '''draw_card(G.deck,G.hand, i*100/hand_space,'up', true, cards_to_draw[i])
         end
     end'''
 position = "after"
@@ -468,12 +469,13 @@ match_indent = true
 times = 1
 
 # Trigger opponent joker calculation after new round( since there is no blind selection for the opponent)
+# Pattern updated for SMODS compatibility: SMODS added SMODS.calculate_context
 [[patches]]
 [patches.pattern]
 target = "functions/state_events.lua"
-pattern = '''for i = 1, #G.jokers.cards do
-                G.jokers.cards[i]:calculate_joker({setting_blind = true, blind = G.GAME.round_resets.blind})
-            end'''
+pattern = '''SMODS.calculate_context({setting_blind = true, blind = G.GAME.round_resets.blind})
+
+-- TARGET: setting_blind effects'''
 position = "after"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
@@ -484,15 +486,13 @@ end
 '''
 match_indent = true
 times = 1
-
-
 # end_round
 # Trigger opponent joker calculation after new round( since there is no blind selection for the opponent)
+# Pattern updated for SMODS compatibility: SMODS modified stuff here
 [[patches]]
 [patches.pattern]
 target = "functions/state_events.lua"
-pattern = '''G.jokers.cards[i]:calculate_perishable()
-            end'''
+pattern = '''-- TARGET: main end_of_round evaluation'''
 position = "after"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then

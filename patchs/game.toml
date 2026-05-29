@@ -35,10 +35,11 @@ match_indent = true
 times = 1
 
 # start_run: Initialize opponent card areas if in netplay
+#Pattern updated for SMODS compatibility: SMODS adds negative_info
 [[patches]]
 [patches.pattern]
 target = "game.lua"
-pattern = '''{card_limit = self.GAME.starting_params.hand_size, type = 'hand'})'''
+pattern = '''{card_limit = self.GAME.starting_params.hand_size, type = 'hand', negative_info = 'playing_card'})'''
 position = "after"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
@@ -79,10 +80,11 @@ times = 1
 
 # Draw opponent hand
 # Also unlock the player hand if locked (mainly because it was locked by discard)
+# Pattern updated for SMODS compatibility: SMODS chnaged stuff here
 [[patches]]
 [patches.pattern]
 target = "game.lua"
-pattern = '''if G.GAME.current_round.hands_played == 0 and'''
+pattern = '''-- removed first hand drawn context'''
 position = "before"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
@@ -455,15 +457,11 @@ match_indent = true
 times = 2
 
 # Update_draw_to_hand: ignore facing blind and trigger joker (online too) calculation at first hand drawn
+# Pattern updated for SMODS compatibility: SMODS removed stuff here
 [[patches]]
 [patches.pattern]
 target = "game.lua"
-pattern = '''if G.GAME.current_round.hands_played == 0 and
-                    G.GAME.current_round.discards_used == 0 and G.GAME.facing_blind then
-                    for i = 1, #G.jokers.cards do
-                        G.jokers.cards[i]:calculate_joker({first_hand_drawn = true})
-                    end
-                end'''
+pattern = '''-- removed first hand drawn context'''
 position = "at"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then

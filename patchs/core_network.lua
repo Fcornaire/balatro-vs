@@ -31,6 +31,65 @@ function on_network_issue()
     }
 end
 
+function on_smods_required()
+    play_sound('whoosh', 1)
+    G.FUNCS.overlay_menu {
+        definition =
+            create_UIBox_generic_options({
+                back_func = 'exit_overlay_menu',
+                contents = {
+                    create_tabs(
+                        {
+                            scale = 1.5,
+                            tabs =
+                            {
+                                {
+                                    chosen = true,
+                                    label = "Warning",
+                                    tab_definition_function = function()
+                                        return
+                                        {
+                                            n = G.UIT.ROOT,
+                                            config = { align = "cm", padding = 0.2, colour = G.C.BLACK, r = 0.1, emboss = 0.05, minh = 6, minw = 6 },
+                                            nodes = {
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", scale = 0.5, shadow = true },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "Steamodded is now required to use Balatro Versus", scale = 1.0, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", scale = 0.5, shadow = true },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "Supported version is 1.0.0-beta-1620a", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", scale = 0.5, shadow = true },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "A more recent version than this might not work", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                    nodes = {
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    end
+                                }
+                            }
+                        }),
+                }
+            })
+    }
+end
+
 function on_update()
     play_sound('whoosh', 1)
     G.FUNCS.overlay_menu {
@@ -690,9 +749,14 @@ end
 G.FUNCS.network_send_open_booster = function(card, shop_jokers_cards)
     if network_send_open_booster then
         local card_conf = {}
-        card_conf.center = card.config.center and lume.serialize(card.config.center) or ''
-        card_conf.card = card.config.card and lume.serialize(card.config.card) or ''
-        card_conf.ability = card.ability and lume.serialize(card.ability) or ''
+
+        --SMODS introduce function that cant be serialized, so we need to remove them before serializing
+        local center_copy = custom_copy_table(card.config.center)
+        local card_copy = custom_copy_table(card.config.card)
+        local ability_copy = custom_copy_table(card.ability)
+        card_conf.center = card.config.center and lume.serialize(center_copy) or ''
+        card_conf.card = card.config.card and lume.serialize(card_copy) or ''
+        card_conf.ability = card.ability and lume.serialize(ability_copy) or ''
         card_conf.center_key = card.config.center_key
 
         card_conf.label = card.ability.name
@@ -703,9 +767,12 @@ G.FUNCS.network_send_open_booster = function(card, shop_jokers_cards)
         for _, shop_joker in pairs(shop_jokers_cards) do
             if not is_online_card(shop_joker.config.center.key) then --Unless we have in the future online booster cards
                 local shop_joker_conf = {}
-                shop_joker_conf.center = shop_joker.config.center and lume.serialize(shop_joker.config.center) or ''
-                shop_joker_conf.card = shop_joker.config.card and lume.serialize(shop_joker.config.card) or ''
-                shop_joker_conf.ability = shop_joker.ability and lume.serialize(shop_joker.ability) or ''
+                local center_copy = custom_copy_table(shop_joker.config.center)
+                local card_copy = custom_copy_table(shop_joker.config.card)
+                local ability_copy = custom_copy_table(shop_joker.ability)
+                shop_joker_conf.center = shop_joker.config.center and lume.serialize(center_copy) or ''
+                shop_joker_conf.card = shop_joker.config.card and lume.serialize(card_copy) or ''
+                shop_joker_conf.ability = shop_joker.ability and lume.serialize(ability_copy) or ''
                 shop_joker_conf.center_key = shop_joker.config.center_key
                 shop_joker_conf.label = shop_joker.ability.name
                 shop_joker_conf.type_ = (shop_joker.config.center.set == 'Planet' or shop_joker.config.center.set == 'Tarot') and

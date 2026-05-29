@@ -54,20 +54,20 @@ payload = '''
 
 IS_DEV = false --TODO: confg file
 
-function get_bvs_json(...) --Android specific
-    if love.filesystem.getInfo("bvs.json") then
-        return love.filesystem.read("bvs.json")
+function get_bvs_json(...)
+    local path = "Mods/balatro-vs/lovely/bvs.json"
+    if love.filesystem.getInfo(path) then
+        return love.filesystem.read(path)
     else
         return nil
     end
 end
-
 local lurker = nil 
 lume = require('rxi-lume')
 
-if IS_DEV then
-      lurker = require('rxi-lurker')
-end
+--if IS_DEV then
+--      lurker = require('rxi-lurker')
+--end
 
 require('balatro-vs_core')
 VecDeque = require('balatro-vs_utils').VecDeque

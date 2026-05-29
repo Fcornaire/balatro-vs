@@ -2872,16 +2872,43 @@ match_indent = true
 times = 1
 
 # use the above flag to use the appropriate joker calculation effect
+# Pattern updated for SMODS compatibility: SMODS added trigger_effects
 [[patches]]
 [patches.pattern]
 target = "card.lua"
-pattern = '''self:calculate_joker{selling_self = true}'''
+pattern = '''local eval, post = eval_card(self, {selling_self = true})
+local effects = {eval}
+for _,v in ipairs(post) do effects[#effects+1] = v end
+if eval.retriggers then
+    for rt = 1, #eval.retriggers do
+        local rt_eval, rt_post = eval_card(self, { selling_self = true, retrigger_joker = true})
+        if next(rt_eval) then
+            table.insert(effects, {eval.retriggers[rt]})
+            table.insert(effects, rt_eval)
+            for _, v in ipairs(rt_post) do effects[#effects+1] = v end
+        end
+    end
+end
+SMODS.trigger_effects(effects, self)'''
 position = "at"
 payload = '''
 if is_opponent then
     self:opponent_calculate_joker{selling_self = true}
 else 
-    self:calculate_joker{selling_self = true}
+    local eval, post = eval_card(self, {selling_self = true})
+    local effects = {eval}
+    for _,v in ipairs(post) do effects[#effects+1] = v end
+    if eval.retriggers then
+        for rt = 1, #eval.retriggers do
+            local rt_eval, rt_post = eval_card(self, { selling_self = true, retrigger_joker = true})
+            if next(rt_eval) then
+                table.insert(effects, {eval.retriggers[rt]})
+                table.insert(effects, rt_eval)
+                for _, v in ipairs(rt_post) do effects[#effects+1] = v end
+            end
+        end
+    end
+    SMODS.trigger_effects(effects, self)
 end
 '''
 match_indent = true
@@ -3048,12 +3075,13 @@ times = 1
 
 
 # set_ability : For opponent "to do list", use the appropriate pseudoseed and hands
+# Pattern updated for SMODS compatibility: SMODS added is_poker_hand_visible
 [[patches]]
 [patches.pattern]
 target = "card.lua"
 pattern = '''local _poker_hands = {}
         for k, v in pairs(G.GAME.hands) do
-            if v.visible then _poker_hands[#_poker_hands+1] = k end
+            if SMODS.is_poker_hand_visible(k) then _poker_hands[#_poker_hands+1] = k end
         end
         local old_hand = self.ability.to_do_poker_hand
         self.ability.to_do_poker_hand = nil
@@ -3079,7 +3107,7 @@ if self.params.is_opponent then
 else
         local _poker_hands = {}
         for k, v in pairs(G.GAME.hands) do
-            if v.visible then _poker_hands[#_poker_hands+1] = k end
+            if SMODS.is_poker_hand_visible(k) then _poker_hands[#_poker_hands+1] = k end
         end
         local old_hand = self.ability.to_do_poker_hand
         self.ability.to_do_poker_hand = nil
@@ -3108,10 +3136,12 @@ match_indent = true
 times = 1
 
 # Remove : use the appropriate remove_from_deck for opponent cards
+# Pattern updated for SMODS compatibility: SMODS added queue_negative_removal
 [[patches]]
 [patches.pattern]
 target = "card.lua"
-pattern = '''self:remove_from_deck()'''
+pattern = '''self:remove_from_deck()
+    if self.ability.queue_negative_removal then'''
 position = "at"
 payload = '''
 if self.params.is_opponent then
@@ -3119,7 +3149,7 @@ if self.params.is_opponent then
 else
     self:remove_from_deck()
 end
-'''
+    if self.ability.queue_negative_removal then'''
 match_indent = true
 times = 1
 
@@ -3172,10 +3202,11 @@ match_indent = true
 times = 1
 
 #generate_UIBox_ability_table : Add warnings text
+#Pattern updated for SMODS compatibility: SMODS added self
 [[patches]]
 [patches.pattern]
 target = "card.lua"
-pattern = '''return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end)'''
+pattern = '''return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end, self)'''
 position = "before"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
@@ -3320,23 +3351,25 @@ match_indent = true
 times = 2
 
 # generate_UIBox_ability_table : pass the is_opponent flag to generate_card_ui
+#Pattern updated for SMODS compatibility: SMODS added self
 [[patches]]
 [patches.pattern]
 target = "card.lua"
-pattern = ''' return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end)'''
+pattern = ''' return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end, self)'''
 position = "at"
 payload = '''
-return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end, self.area == G.opponent_jokers or self.area == G.opponent_consumeables) -- self.params.is_opponent should work...
+return generate_card_ui(self.config.center, nil, loc_vars, card_type, badges, hide_desc, main_start, main_end,self, self.area == G.opponent_jokers or self.area == G.opponent_consumeables) -- self.params.is_opponent should work...
 
 '''
 match_indent = true
 times = 1
 
 # is_suit: use the appropriate find_joker for the opponent card
+# Pattern updated for SMODS compatibility: SMODS added smeared_check
 [[patches]]
 [patches.pattern]
 target = "card.lua"
-pattern = '''if next(find_joker('Smeared Joker')) and (self.base.suit == 'Hearts' or self.base.suit == 'Diamonds') == (suit == 'Hearts' or suit == 'Diamonds') then'''
+pattern = '''if SMODS.smeared_check(self, suit) then'''
 position = "before"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
@@ -3353,16 +3386,17 @@ times = 2
 
 
 # set_ability: use the appropriate used_jokers for the opponent card
+# Pattern updated for SMODS compatibility: SMODS added self.config.center.key
 [[patches]]
 [patches.pattern]
 target = "card.lua"
-pattern = '''G.GAME.used_jokers[k] = true'''
+pattern = '''G.GAME.used_jokers[self.config.center.key] = true'''
 position = "at"
 payload = '''
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and self.params.is_opponent then
-    G.GAME.opponent_used_jokers[k] = true
+    G.GAME.opponent_used_jokers[self.config.center.key] = true
 else
-    G.GAME.used_jokers[k] = true    
+    G.GAME.used_jokers[self.config.center.key] = true    
 end
 
 '''

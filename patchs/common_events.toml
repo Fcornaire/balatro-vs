@@ -2,35 +2,38 @@
 version = "0.1.0"
 priority = 0
 
+# Pattern updated for SMODS compatibility: SMODS added context.main_scoring
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''if context.cardarea == G.play then'''
+pattern = '''if context.cardarea == G.play and context.main_scoring then'''
 position = "at"
 payload = '''
-    if context.cardarea == G.play or context.cardarea == G.opponent_play then
+    if (context.cardarea == G.play or context.cardarea == G.opponent_play) and context.main_scoring then
 '''
 match_indent = true
 times = 1
 
+# Pattern updated for SMODS compatibility: SMODS added context.main_scoring
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''if context.cardarea == G.hand then'''
+pattern = '''if context.cardarea == G.hand and context.main_scoring then'''
 position = "at"
 payload = '''
-    if context.cardarea == G.hand or context.cardarea == G.opponent_hand then
+    if (context.cardarea == G.hand or context.cardarea == G.opponent_hand) and context.main_scoring then
 '''
 match_indent = true
 times = 1
 
+# Pattern updated for SMODS compatibility: SMODS added area_set
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''if context.cardarea == G.jokers or context.card == G.consumeables then'''
+pattern = '''if card.area and area_set[card.area] then'''
 position = "at"
 payload = '''
-    if context.cardarea == G.jokers or context.cardarea == G.consumeables or context.cardarea == G.opponent_jokers or context.cardarea == G.opponent_consumeables then
+    if card.area and (area_set[card.area] or card.area == G.opponent_jokers or card.area == G.opponent_consumeables) then
 '''
 match_indent = true
 times = 1
@@ -48,13 +51,14 @@ match_indent = true
 times = 1
 
 
+# Pattern updated for SMODS compatibility: SMODS added card.area
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''elseif card.area == G.hand then'''
+pattern = '''elseif card.area == G.hand or card.area == G.deck then'''
 position = "at"
 payload = '''
-    elseif card.area == G.hand or card.area == G.opponent_hand then
+    elseif card.area == G.hand or card.area == G.deck or card.area == G.opponent_hand then
 '''
 match_indent = true
 times = 1
@@ -85,6 +89,7 @@ match_indent = true
 times = 1
 
 #Add netplay round eval
+# Pattern updated for SMODS compatibility: SMODS added G.GAME.saved_text
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
@@ -92,7 +97,7 @@ pattern = '''table.insert(left_text,
                     config.saved and 
                     {n=G.UIT.C, config={padding = 0.05, align = 'cm'}, nodes={
                         {n=G.UIT.R, config={align = 'cm'}, nodes={
-                            {n=G.UIT.O, config={object = DynaText({string = {' '..localize('ph_mr_bones')..' '}, colours = {G.C.FILTER}, shadow = true, pop_in = 0, scale = 0.5*scale, silent = true})}}
+                            {n=G.UIT.O, config={object = DynaText({string = {' '..(type(G.GAME.saved_text) == 'string' and (G.localization.misc.dictionary[G.GAME.saved_text] and localize(G.GAME.saved_text) or G.GAME.saved_text) or localize('ph_mr_bones'))..' '}, colours = {G.C.FILTER}, shadow = true, pop_in = 0, scale = 0.5*scale, silent = true})}}
                         }}
                     }}
                     or {n=G.UIT.C, config={padding = 0.05, align = 'cm'}, nodes={
@@ -247,6 +252,7 @@ match_indent = true
 times = 1
 
 #...and use the appropriate pool for the opponent
+# Pattern updated for SMODS compatibility: pseudoseed swapped to opponent closure so poll_rarity/pseudorandom_element draw from opponent seed
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
@@ -260,18 +266,21 @@ pattern = '''local _pool, _pool_key = get_current_pool(_type, _rarity, legendary
 position = "at"
 payload = '''
 if is_opponent then
-    local _pool, _pool_key = get_current_pool(_type, _rarity, legendary, key_append,true)
-
-    center = pseudorandom_element(_pool, opponent_pseudoseed(_pool_key))
+    local _orig_pseudoseed = pseudoseed
+    pseudoseed = function(key, predict_seed, should_skip_opponent)
+        if should_skip_opponent then return _orig_pseudoseed(key, predict_seed, true) end
+        return opponent_pseudoseed(key)
+    end
+    local _pool, _pool_key = get_current_pool(_type, _rarity, legendary, key_append, true)
+    center = pseudorandom_element(_pool, pseudoseed(_pool_key))
     local it = 1
     while center == 'UNAVAILABLE' do
         it = it + 1
-        
-        center = pseudorandom_element(_pool, opponent_pseudoseed(_pool_key..'_resample'..it))
+        center = pseudorandom_element(_pool, pseudoseed(_pool_key..'_resample'..it))
     end
+    pseudoseed = _orig_pseudoseed
 else
     local _pool, _pool_key = get_current_pool(_type, _rarity, legendary, key_append)
-
     center = pseudorandom_element(_pool, pseudoseed(_pool_key))
     local it = 1
     while center == 'UNAVAILABLE' do
@@ -279,23 +288,23 @@ else
         center = pseudorandom_element(_pool, pseudoseed(_pool_key..'_resample'..it))
     end
 end
-   
 '''
 match_indent = true
 times = 1
 
 #Create_card:Use the appropriate pseudorandom function for the opponent
+# Pattern updated for SMODS compatibility: SMODS added SMODS.showman()
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
 pattern = '''if (_type == 'Tarot' or _type == 'Spectral' or _type == 'Tarot_Planet') and
-        not (G.GAME.used_jokers['c_soul'] and not next(find_joker("Showman")))  then
+        not (G.GAME.used_jokers['c_soul'] and not SMODS.showman('c_soul')) then
             if pseudorandom('soul_'.._type..G.GAME.round_resets.ante) > 0.997 then
                 forced_key = 'c_soul'
             end
         end
         if (_type == 'Planet' or _type == 'Spectral') and
-        not (G.GAME.used_jokers['c_black_hole'] and not next(find_joker("Showman")))  then 
+        not (G.GAME.used_jokers['c_black_hole'] and not SMODS.showman('c_black_hole')) then 
             if pseudorandom('soul_'.._type..G.GAME.round_resets.ante) > 0.997 then
                 forced_key = 'c_black_hole'
             end
@@ -317,13 +326,13 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
     end
 else
     if (_type == 'Tarot' or _type == 'Spectral' or _type == 'Tarot_Planet') and
-            not (G.GAME.used_jokers['c_soul'] and not next(find_joker("Showman"))) then
+            not (G.GAME.used_jokers['c_soul'] and not SMODS.showman('c_soul')) then
             if pseudorandom('soul_' .. _type .. G.GAME.round_resets.ante) > 0.997 then
                 forced_key = 'c_soul'
             end
         end
         if (_type == 'Planet' or _type == 'Spectral') and
-            not (G.GAME.used_jokers['c_black_hole'] and not next(find_joker("Showman"))) then
+            not (G.GAME.used_jokers['c_black_hole'] and not SMODS.showman('c_black_hole')) then
             if pseudorandom('soul_' .. _type .. G.GAME.round_resets.ante) > 0.997 then
                 forced_key = 'c_black_hole'
             end
@@ -334,23 +343,25 @@ match_indent = true
 times = 1
 
 #get_current_pool: Use the appropriate pseudorandom function for the opponent
+# Pattern updated for SMODS compatibility: SMODS use SMODS.poll_rarity
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''local rarity = _rarity or pseudorandom('rarity'..G.GAME.round_resets.ante..(_append or ''))'''
+pattern = '''local rarity = _rarity or SMODS.poll_rarity("Joker", 'rarity'..G.GAME.round_resets.ante..(_append or ''))'''
 position = "at"
 payload = '''
 local rarity = nil
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
-    rarity = _rarity or pseudorandom(opponent_pseudoseed('rarity' .. G.GAME.opponent_round_resets.ante .. (_append or '')))
+    rarity = _rarity or SMODS.poll_rarity("Joker", 'rarity'..G.GAME.opponent_round_resets.ante..(_append or ''))
 else
-    rarity = _rarity or pseudorandom('rarity' .. G.GAME.round_resets.ante .. (_append or ''))
+    rarity = _rarity or SMODS.poll_rarity("Joker", 'rarity'..G.GAME.round_resets.ante..(_append or ''))
 end
 '''
 match_indent = true
 times = 1
 
 #Use the appropriate poll_edition for the opponent
+# Pattern updated for SMODS compatibility: pseudoseed swapped around poll_edition call so SMODS override draws from opponent seed
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
@@ -359,7 +370,13 @@ position = "at"
 payload = '''
 local edition = nil
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
-    edition = poll_edition('edi' ..(key_append or '')..G.GAME.opponent_round_resets.ante,nil,nil,nil,true)
+    local _orig_pseudoseed = pseudoseed
+    pseudoseed = function(key, predict_seed, should_skip_opponent)
+        if should_skip_opponent then return _orig_pseudoseed(key, predict_seed, true) end
+        return opponent_pseudoseed(key)
+    end
+    edition = poll_edition('edi'..(key_append or '')..G.GAME.opponent_round_resets.ante)
+    pseudoseed = _orig_pseudoseed
 else
     edition = poll_edition('edi'..(key_append or '')..G.GAME.round_resets.ante)
 end
@@ -368,80 +385,18 @@ match_indent = true
 times = 1
 
 
-#poll_edition: Add a is_opponent flag for opponent card creation...
+# Pattern updated for SMODS compatibility: SMODS adds SMODS.set_create_card_front
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''function poll_edition(_key, _mod, _no_neg, _guaranteed)'''
-position = "at"
-payload = '''
-function poll_edition(_key, _mod, _no_neg, _guaranteed, is_opponent)
-'''
-match_indent = true
-times = 1
-
-#poll_edition: ...and use the appropriate pseudorandom function for the opponent
-[[patches]]
-[patches.pattern]
-target = "functions/common_events.lua"
-pattern = '''local edition_poll = pseudorandom(pseudoseed(_key or 'edition_generic'))'''
-position = "at"
-payload = '''
-local edition_poll = nil
-if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
-    edition_poll = pseudorandom(opponent_pseudoseed(_key or 'edition_generic'))
-else
-    edition_poll = pseudorandom(pseudoseed(_key or 'edition_generic'))
-end
-'''
-match_indent = true
-times = 1
-
-#poll_edition: Also use the appropriate edition_rate (modified by the voucher) for opponent card
-[[patches]]
-[patches.pattern]
-target = "functions/common_events.lua"
-pattern = '''if edition_poll > 1 - 0.003*_mod and not _no_neg then
-            return {negative = true}
-        elseif edition_poll > 1 - 0.006*G.GAME.edition_rate*_mod then
-            return {polychrome = true}
-        elseif edition_poll > 1 - 0.02*G.GAME.edition_rate*_mod then
-            return {holo = true}
-        elseif edition_poll > 1 - 0.04*G.GAME.edition_rate*_mod then
-            return {foil = true}
-        end'''
-position = "at"
-payload = '''
-local edition_type
-local edition_rate = is_opponent and G.GAME.opponent_edition_rate or G.GAME.edition_rate
-
-if edition_poll > 1 - 0.003 * _mod and not _no_neg then
-    edition_type = { negative = true }
-elseif edition_poll > 1 - 0.006 * edition_rate * _mod then
-    edition_type = { polychrome = true }
-elseif edition_poll > 1 - 0.02 * edition_rate * _mod then
-    edition_type = { holo = true }
-elseif edition_poll > 1 - 0.04 * edition_rate * _mod then
-    edition_type = { foil = true }
-end
-
-return edition_type
-'''
-match_indent = true
-times = 1
-
-#Use the appropriate pseudorandom function for the opponent
-[[patches]]
-[patches.pattern]
-target = "functions/common_events.lua"
-pattern = ''' local front = ((_type=='Base' or _type == 'Enhanced') and pseudorandom_element(G.P_CARDS, pseudoseed('front'..(key_append or '')..G.GAME.round_resets.ante))) or nil'''
+pattern = ''' local front = SMODS.set_create_card_front or ((_type=='Base' or _type == 'Enhanced') and pseudorandom_element(G.P_CARDS, pseudoseed('front'..(key_append or '')..G.GAME.round_resets.ante))) or nil'''
 position = "at"
 payload = '''
 local front = nil
 if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_opponent then
     front = ((_type == 'Base' or _type == 'Enhanced') and pseudorandom_element(G.P_CARDS, opponent_pseudoseed('front' .. (key_append or '') .. G.GAME.opponent_round_resets.ante),nil)) or nil
 else
-    front = ((_type=='Base' or _type == 'Enhanced') and pseudorandom_element(G.P_CARDS, pseudoseed('front'..(key_append or '')..G.GAME.round_resets.ante))) or nil
+    front = SMODS.set_create_card_front or ((_type=='Base' or _type == 'Enhanced') and pseudorandom_element(G.P_CARDS, pseudoseed('front'..(key_append or '')..G.GAME.round_resets.ante))) or nil
 end
 '''
 match_indent = true
@@ -474,11 +429,12 @@ match_indent = true
 times = 1
 
 #get_current_pool: ...and use the appropriate playing_cards for the opponent
+# Pattern updated for SMODS compatibility: SMODS adds SMODS.has_enhancement()
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
 pattern = '''for kk, vv in pairs(G.playing_cards) do
-                    if vv.config.center.key == v.enhancement_gate then
+                    if SMODS.has_enhancement(vv, v.enhancement_gate) then
                         add = true
                     end
                 end'''
@@ -486,13 +442,13 @@ position = "at"
 payload = '''
 if is_opponent then
     for kk, vv in pairs(G.opponent_playing_cards) do
-                    if vv.config.center.key == v.enhancement_gate then
+                    if SMODS.has_enhancement(vv, v.enhancement_gate) then
                         add = true
                     end
                 end
 else
     for kk, vv in pairs(G.playing_cards) do
-                    if vv.config.center.key == v.enhancement_gate then
+                    if SMODS.has_enhancement(vv, v.enhancement_gate) then
                         add = true
                     end
                 end
@@ -502,10 +458,11 @@ match_indent = true
 times = 1
 
 #get_current_pool: use the appropriate function for opponent
+#Pattern updated for SMODS compatibility : find_joker("Showman") replaced with pool_opts.allow_duplicates and SMODS.showman
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''elseif not (G.GAME.used_jokers[v.key] and not next(find_joker("Showman"))) and'''
+pattern = '''elseif not (G.GAME.used_jokers[v.key] and not pool_opts.allow_duplicates and not SMODS.showman(v.key)) and'''
 position = "at"
 payload = '''
 elseif is_opponent and not (G.GAME.opponent_used_jokers[v.key] and not next(opponent_find_joker("Showman"))) and
@@ -546,7 +503,7 @@ elseif is_opponent and not (G.GAME.opponent_used_jokers[v.key] and not next(oppo
             if v.name == 'Black Hole' or v.name == 'The Soul' then
                 add = false
             end
-elseif not is_opponent and not (G.GAME.used_jokers[v.key] and not next(find_joker("Showman"))) and    
+elseif not is_opponent and not (G.GAME.used_jokers[v.key] and not pool_opts.allow_duplicates and not SMODS.showman(v.key)) and    
 '''
 match_indent = true
 times = 1
@@ -567,25 +524,41 @@ match_indent = true
 times = 1
 
 #generate_card_ui: Add a flag for the opponent
+# Pattern updated for SMODS compatibility: SMODS add nil-check 
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end)'''
+pattern = '''function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card)
+    if card == nil and card_type then
+        card = SMODS.compat_0_9_8.generate_UIBox_ability_table_card
+    end
+
+    if _c.specific_vars then specific_vars = _c.specific_vars end'''
 position = "at"
 payload = '''
-function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, is_opponent)
+function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, is_opponent)
+    if card == nil and card_type then
+        card = SMODS.compat_0_9_8.generate_UIBox_ability_table_card
+    end
+
+    if _c.specific_vars then specific_vars = _c.specific_vars end
 '''
 match_indent = true
 times = 1
 
 #generate_card_ui: Use the right probabilities for the opponent
+# Pattern updated for SMODS compatibility: SMODS expands Wheel of Fortune to SMODS.get_probability_vars
 [[patches]]
 [patches.pattern]
 target = "functions/common_events.lua"
-pattern = '''elseif _c.name == "The Wheel of Fortune" then loc_vars = {G.GAME.probabilities.normal, _c.config.extra};  info_queue[#info_queue+1] = G.P_CENTERS.e_foil; info_queue[#info_queue+1] = G.P_CENTERS.e_holo; info_queue[#info_queue+1] = G.P_CENTERS.e_polychrome;'''
+pattern = '''elseif _c.name == "The Wheel of Fortune" then 
+    loc_vars = {SMODS.get_probability_vars(card, 1, cfg.extra, 'wheel_of_fortune')}
+    info_queue[#info_queue+1] = G.P_CENTERS.e_foil
+    info_queue[#info_queue+1] = G.P_CENTERS.e_holo
+    info_queue[#info_queue+1] = G.P_CENTERS.e_polychrome'''
 position = "before"
 payload = '''
-elseif _c.name == "The Wheel of Fortune" and is_opponent then loc_vars = {G.GAME.opponent_probabilities.normal, _c.config.extra};  info_queue[#info_queue+1] = G.P_CENTERS.e_foil; info_queue[#info_queue+1] = G.P_CENTERS.e_holo; info_queue[#info_queue+1] = G.P_CENTERS.e_polychrome; 
+elseif _c.name == "The Wheel of Fortune" and is_opponent then loc_vars = {G.GAME.opponent_probabilities.normal, cfg.extra};  info_queue[#info_queue+1] = G.P_CENTERS.e_foil; info_queue[#info_queue+1] = G.P_CENTERS.e_holo; info_queue[#info_queue+1] = G.P_CENTERS.e_polychrome; 
 '''
 match_indent = true
 times = 1
@@ -598,7 +571,7 @@ target = "functions/common_events.lua"
 pattern = '''generate_card_ui(v, full_UI_table)'''
 position = "at"
 payload = '''
-generate_card_ui(v, full_UI_table, nil, nil, nil, nil, nil, nil, is_opponent)
+generate_card_ui(v, full_UI_table, nil, nil, nil, nil, nil, nil, nil, is_opponent)
 '''
 match_indent = true
 times = 1

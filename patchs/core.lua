@@ -267,11 +267,16 @@ function update_consumeables_alignment(consumeables, dragged_card)
 end
 
 function backup_progress()
+    --SMODS introduce function that cant be serialized, so we need to remove them before serializing
+    local centers_copy = custom_copy_table(G.P_CENTERS)
+    local blinds_copy = custom_copy_table(G.P_BLINDS)
+    local tags_copy = custom_copy_table(G.P_TAGS)
+
     BALATRO_VS_CTX.progress = {
         all_unlocked = G.PROFILES[G.SETTINGS.profile].all_unlocked,
-        centers = lume.serialize(G.P_CENTERS),
-        blinds = lume.serialize(G.P_BLINDS),
-        tags = lume.serialize(G.P_TAGS),
+        centers = lume.serialize(centers_copy),
+        blinds = lume.serialize(blinds_copy),
+        tags = lume.serialize(tags_copy),
     }
 end
 
@@ -286,6 +291,7 @@ BALATRO_VS_CTX = {
         should_reset = false,
         has_opponent_maestro_and_highlighted_cards = false,
         is_rematch_requested = false,
+        smods_missing_shown = false,
     },
     is_in_shop_and_ready = false,
     alignements = {

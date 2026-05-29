@@ -363,6 +363,7 @@ match_indent = true
 times = 1
 
 
+# Pattern updated for SMODS compatibility: SMODS expands row_blind to include row_blind_bottom
 [[patches]]
 [patches.pattern]
 target = "functions/UI_definitions.lua"
@@ -370,7 +371,9 @@ pattern = '''return {n=G.UIT.ROOT, config = {align = "cm", padding = 0.03, colou
       {n=G.UIT.R, config = {align = "cm", padding= 0.05, colour = G.C.DYN_UI.MAIN, r=0.1}, nodes={
         {n=G.UIT.R, config={align = "cm", colour = G.C.DYN_UI.BOSS_DARK, r=0.1, minh = 30, padding = 0.08}, nodes={
           {n=G.UIT.R, config={align = "cm", minh = 0.3}, nodes={}},
-          {n=G.UIT.R, config={align = "cm", id = 'row_blind', minw = 1, minh = 3.75}, nodes={}},
+          {n=G.UIT.R, config={align = "cm", id = 'row_blind', minw = 1, minh = 3.75}, nodes={
+    {n=G.UIT.B, config={w=0, h=3.64, id = 'row_blind_bottom'}, nodes={}}
+}},
           contents.dollars_chips,
           contents.hand,
           {n=G.UIT.R, config={align = "cm", id = 'row_round'}, nodes={
@@ -470,7 +473,9 @@ else
             config = { align = "cm", colour = G.C.DYN_UI.BOSS_DARK, r = 0.1, minh = 30, padding = 0.08 },
             nodes = {
               { n = G.UIT.R, config = { align = "cm", minh = 0.3 },                              nodes = {} },
-              { n = G.UIT.R, config = { align = "cm", id = 'row_blind', minw = 1, minh = 3.75 }, nodes = {} },
+              { n = G.UIT.R, config = { align = "cm", id = 'row_blind', minw = 1, minh = 3.75 }, nodes = {
+                {n=G.UIT.B, config={w=0, h=3.64, id = 'row_blind_bottom'}, nodes={}}
+              } },
               contents.dollars_chips,
               contents.hand,
               {

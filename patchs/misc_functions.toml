@@ -12,6 +12,7 @@ payload = '''
       local strings = {
           b_versus = "VERSUS",
           b_versus_matchmaking = "Versus Matchmaking",
+          b_start_versus_matchmaking = "Start Matchmaking",
           b_versus_friendlies = "Versus Friendlies",
           b_versus_friendlies_tip1 = "Share the current code with someone to play (Anyone with this code can join!)",
           b_versus_friendlies_tip2 = "Or enter/paste your opponent's code here (Case sensitive)",
@@ -80,17 +81,28 @@ payload = '''
 match_indent = true
 times = 1
 
+# Pattern updated for SMODS compatibility: SMODS changed stuff here with pcall
 [[patches]]
 [patches.pattern]
 target = "functions/misc_functions.lua"
-pattern = "loc_target = G.localization.descriptions[(args.set or args.node.config.center.set)][args.key or args.node.config.center.key]"
+pattern = '''loc_target = loc_target or {}
+        if pcall(function()
+            local name = G.localization.descriptions[(args.set or args.node.config.center.set)][args.key or args.node.config.center.key]
+            loc_target.name_parsed = name.name_parsed or {loc_parse_string(name.name)}
+        end) then
+        else loc_target.name_parsed = {} end'''
 position = "at"
 payload = '''
-        if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_online_card(args.key) then
-            loc_target = get_localized_description(args.key)
-        else
-          loc_target = G.localization.descriptions[(args.set or args.node.config.center.set)][args.key or args.node.config.center.key]
-        end
+if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and is_online_card(args.key) then
+    loc_target = get_localized_description(args.key)
+else
+    loc_target = loc_target or {}
+    if pcall(function()
+        local name = G.localization.descriptions[(args.set or args.node.config.center.set)][args.key or args.node.config.center.key]
+        loc_target.name_parsed = name.name_parsed or {loc_parse_string(name.name)}
+    end) then
+    else loc_target.name_parsed = {} end
+end
 '''
 match_indent = true
 times = 1
@@ -198,6 +210,7 @@ function pseudorandom(seed, min, max,is_opponent)
 match_indent = true
 times = 1
 
+#Pattern updated for Compatibility : SMODS added SMODS.calculate_round_score
 [[patches]]
 [patches.pattern]
 target = "functions/misc_functions.lua"
@@ -206,7 +219,11 @@ pattern = '''  G.SETTINGS.ambient_control = G.SETTINGS.ambient_control or {}
   if type(G.GAME.current_round.current_hand.chips) ~= 'number' or type(G.GAME.current_round.current_hand.mult) ~= 'number' then
     G.ARGS.score_intensity.earned_score = 0
   else
-    G.ARGS.score_intensity.earned_score = G.GAME.current_round.current_hand.chips*G.GAME.current_round.current_hand.mult
+    local all_numbers = true
+    for name, parameter in pairs(SMODS.Scoring_Parameters) do
+        if type(G.GAME.current_round.current_hand[name]) ~= 'number' then all_numbers = false end
+    end
+    G.ARGS.score_intensity.earned_score = all_numbers and SMODS.calculate_round_score(true) or 0
   end
   G.ARGS.score_intensity.required_score = G.GAME.blind and G.GAME.blind.chips or 0
   G.ARGS.score_intensity.flames = math.min(1, (G.STAGE == G.STAGES.RUN and 1 or 0)*(
@@ -221,7 +238,11 @@ G.ARGS.opponent_score_intensity = G.ARGS.opponent_score_intensity or {}
 if type(G.GAME.current_round.current_hand.chips) ~= 'number' or type(G.GAME.current_round.current_hand.mult) ~= 'number' then
   G.ARGS.score_intensity.earned_score = 0
 else
-  G.ARGS.score_intensity.earned_score = G.GAME.current_round.current_hand.chips * G.GAME.current_round.current_hand.mult
+  local all_numbers = true
+  for name, parameter in pairs(SMODS.Scoring_Parameters) do
+    if type(G.GAME.current_round.current_hand[name]) ~= 'number' then all_numbers = false end
+  end
+  G.ARGS.score_intensity.earned_score = all_numbers and SMODS.calculate_round_score(true) or 0
 end
 
 if type(G.GAME.opponent_current_round.current_hand.chips) ~= 'number' or type(G.GAME.opponent_current_round.current_hand.mult) ~= 'number' then
@@ -329,25 +350,27 @@ match_indent = true
 times = 1
 
 #...and use the appropiate find_joker
+# Pattern updated for SMODS compatibility: SMODS added SMODS.four_fingers
 [[patches]]
 [patches.pattern]
 target = "functions/misc_functions.lua"
-pattern = '''local four_fingers = next(find_joker('Four Fingers'))'''
+pattern = '''local four_fingers = SMODS.four_fingers('flush')'''
 position = "at"
 payload = '''
-local four_fingers =  is_opponent and next(opponent_find_joker('Four Fingers')) or next(find_joker('Four Fingers'))
+local four_fingers = is_opponent and (next(opponent_find_joker('Four Fingers')) and 4 or 5) or SMODS.four_fingers('flush')
 '''
 match_indent = true
 times = 2
 
 
-[[patches]]
-[patches.pattern]
-target = "functions/misc_functions.lua"
-pattern = '''colour = part.control.V and args.vars.colours[tonumber(part.control.V)] or loc_colour(part.control.C or nil, args.default_col),'''
-position = "at"
-payload = '''
-colour = args.vars and args.vars.colours and part.control.V and args.vars.colours[tonumber(part.control.V)] or loc_colour(part.control.C or nil, args.default_col) or G.C.BLACK,
-'''
-match_indent = true
-times = 1
+# Patch removed for SMODS compatibility: colour line no longer exists
+# [[patches]]
+# [patches.pattern]
+# target = "functions/misc_functions.lua"
+# pattern = '''colour = part.control.V and args.vars.colours[tonumber(part.control.V)] or loc_colour(part.control.C or nil, args.default_col),'''
+# position = "at"
+# payload = '''
+# colour = args.vars and args.vars.colours and part.control.V and args.vars.colours[tonumber(part.control.V)] or loc_colour(part.control.C or nil, args.default_col) or G.C.BLACK,
+# '''
+# match_indent = true
+# times = 1

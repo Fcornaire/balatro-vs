@@ -47,6 +47,9 @@ pub fn get_bvs_config() -> &'static Arc<BvsConfig> {
             use crate::macros::macros::execute_lua_function_with_result;
 
             let bvs_conf = execute_lua_function_with_result!("get_bvs_json", String);
+            if bvs_conf.is_empty() {
+                panic!("[bvs_config] Config file not found (bvs.json missing from mod folder)");
+            }
             match serde_json::from_str::<BvsConfig>(&bvs_conf) {
                 Ok(config) => return Arc::new(config),
                 Err(e) => {
