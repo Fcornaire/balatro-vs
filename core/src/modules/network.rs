@@ -41,6 +41,33 @@ pub enum NetworkEvent {
     Rematch(String),
 }
 
+impl fmt::Display for NetworkEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NetworkEvent::NewPeer(_, _, _) => write!(f, "NewPeer"),
+            NetworkEvent::ConfirmMatch => write!(f, "ConfirmMatch"),
+            NetworkEvent::HighlightedCard(_) => write!(f, "HighlightedCard"),
+            NetworkEvent::NewCardAlignement(_, _) => write!(f, "NewCardAlignement"),
+            NetworkEvent::SortedHandSuit => write!(f, "SortedHandSuit"),
+            NetworkEvent::SortedHandValue => write!(f, "SortedHandValue"),
+            NetworkEvent::DiscardedCards(_) => write!(f, "DiscardedCards"),
+            NetworkEvent::NewCardToEmplace(_) => write!(f, "NewCardToEmplace"),
+            NetworkEvent::WaitForYourAction => write!(f, "WaitForYourAction"),
+            NetworkEvent::UsedConsumeableCard(_, _, _, _) => write!(f, "UsedConsumeableCard"),
+            NetworkEvent::VoucherUsed(_) => write!(f, "VoucherUsed"),
+            NetworkEvent::OpenBooster(_, _) => write!(f, "OpenBooster"),
+            NetworkEvent::HighlightedBoosterCard(_) => write!(f, "HighlightedBoosterCard"),
+            NetworkEvent::RerollShop => write!(f, "RerollShop"),
+            NetworkEvent::BoughtCard(_, _) => write!(f, "BoughtCard"),
+            NetworkEvent::SellCard(_, _) => write!(f, "SellCard"),
+            NetworkEvent::Cashout(_) => write!(f, "Cashout"),
+            NetworkEvent::Ping() => write!(f, "Ping"),
+            NetworkEvent::Pong() => write!(f, "Pong"),
+            NetworkEvent::Rematch(_) => write!(f, "Rematch"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum NetworkState {
     Idle,

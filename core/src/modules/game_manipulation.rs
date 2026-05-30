@@ -231,6 +231,42 @@ impl GameManipulation {
                         }
                     }
 
+                    // Guard at first hand draw to prevent loss of hand alignment
+                    let opponent_length = match _type.as_str() {
+                        "hand" => {
+                            execute_lua_function_with_result!("get_opponent_hand_length", usize)
+                        }
+                        "jokers" => {
+                            execute_lua_function_with_result!("get_opponent_jokers_length", usize)
+                        }
+                        "consumeables" => execute_lua_function_with_result!(
+                            "get_opponent_consumeables_length",
+                            usize
+                        ),
+                        _ => panic!("Unknown alignment type: {}", _type),
+                    };
+                    let max_index = to_treat
+                        .iter()
+                        .flat_map(|v| v.iter())
+                        .copied()
+                        .max()
+                        .unwrap_or(0);
+                    if max_index > opponent_length {
+                        warn!(
+                            "[GameManipulation] Weird alignment ({} cards, need {}, have {}). Retrying next tick.",
+                            to_treat.len(), max_index, opponent_length
+                        );
+                        for alignement in to_treat.into_iter().rev() {
+                            self.event_queue.push_front(
+                                GameManipulationEvent::NewHandCardsAlignement(
+                                    alignement,
+                                    _type.clone(),
+                                ),
+                            );
+                        }
+                        return;
+                    }
+
                     let cards_update =
                         self.get_cards_alignements_update(&mut to_treat, _type.clone());
                     execute_lua_function_with_args!(
@@ -373,7 +409,18 @@ impl GameManipulation {
         to_process.drain(..).for_each(|alignement| {
             alignement.windows(2).for_each(|window| {
                 if let [a, b] = window {
-                    cards_update.swap(*a - 1, *b - 1);
+                    let i = a.saturating_sub(1);
+                    let j = b.saturating_sub(1);
+                    if i < cards_update.len() && j < cards_update.len() {
+                        cards_update.swap(i, j);
+                    } else {
+                        error!(
+                            "[GameManipulation] Alignement swap out of bounds. len={}, i={}, j={}",
+                            cards_update.len(),
+                            i,
+                            j
+                        );
+                    }
                 }
             });
         });

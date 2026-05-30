@@ -92,6 +92,8 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
         G.FUNCS.opponent_draw_from_his_deck_to_his_hand(nil) -- TODO: When player discard, this get triggered again but nothing happen because the hand should be full ?
     end
 
+    G.hand:lock()
+
     G.E_MANAGER:add_event(Event({
             trigger = 'after',
             func = function()
@@ -441,6 +443,7 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live and BALATRO_VS_CTX.is_in_sh
     }))
 
 else
+    G.hand:lock()
     G.FUNCS.draw_from_deck_to_hand()
 
     --Some card might be locked because of the previous round
