@@ -12,7 +12,7 @@
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
+[![GPL-3.0 License][license-shield]][license-url]
 
 # About The Mod
 
@@ -79,13 +79,11 @@ This mod runs with [lovely-injector](https://github.com/ethangreen-dev/lovely-in
 A thunderstore build is a windows build, you can follow the same steps as above
 
 > [!IMPORTANT]
-
 > If you installed the mod via [Thunderstore](https://thunderstore.io/), the **auto-updater is disabled**. Updates must be applied through your Thunderstore mod manager.
 
 ## Android
 
 > [!IMPORTANT]
-
 > Android support requires a Steam version of Balatro. You need to build the Android version of the game using [LMM (Lovely Mobile Maker)](https://lmm.shorty.systems/).
 
 - Follow the [LMM](https://lmm.shorty.systems/) instructions to build the Android version of your Steam copy of Balatro and install the APK on your device
@@ -139,4 +137,4 @@ Discord : dshad (was DShad#4670)
 [license-shield]: https://img.shields.io/github/license/Fcornaire/balatro-vs.svg?style=for-the-badge
 [download-shield]: https://img.shields.io/github/downloads/Fcornaire/balatro-vs/total?style=for-the-badge
 [download-url]: https://github.com/Fcornaire/balatro-vs/releases
-[license-url]: https://github.com/Fcornaire/balatro-vs/blob/master/LICENSE.txt
+[license-url]: https://github.com/Fcornaire/balatro-vs/blob/master/LICENSE
