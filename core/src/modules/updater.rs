@@ -80,11 +80,25 @@ impl Updater {
         info!("[Updater] Triggering update");
 
         let client = reqwest::Client::new();
+
+        #[cfg(target_os = "android")]
+        let download_url = format!(
+            "{}/releases/download/{}/balatro-vs-{}-android.zip",
+            base_download_url, last_version, last_version
+        );
+
+        #[cfg(not(target_os = "android"))]
         let download_url = format!(
             "{}/releases/download/{}/balatro-vs.zip",
             base_download_url, last_version
         );
 
+        #[cfg(target_os = "android")]
+        let download_path = std::env::current_dir()
+            .unwrap()
+            .join("balatro-vs-android.zip");
+
+        #[cfg(not(target_os = "android"))]
         let download_path = dirs::download_dir()
             .unwrap_or_else(|| dirs::home_dir().unwrap())
             .join("balatro-vs.zip");
@@ -101,7 +115,7 @@ impl Updater {
                 "[Updater] Failed to download latest version: {:?}",
                 res.text().await
             );
-            return false; //TODO: re test later
+            return false;
         }
 
         let content = res.bytes().await.unwrap();
@@ -113,116 +127,111 @@ impl Updater {
     }
 
     pub fn update(&self) {
-        //unzip the downloaded zip
-        let download_path = dirs::download_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap())
-            .join("balatro-vs.zip");
-        let extract_path = download_path.parent().unwrap().join("balatro-vs-update");
-        let res = unzip_file(&download_path.clone(), &extract_path.clone());
-
-        if res.is_err() {
-            error!("[Updater] Failed to unzip file {:?}", res.err());
+        #[cfg(target_os = "android")]
+        {
+            self.update_android();
             return;
         }
 
-        let extract_path = dirs::download_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap())
-            .join("balatro-vs-update");
-        let main_dll_path = extract_path.join("release").join("winmm.dll");
-        let lovely_patch_path = extract_path.join("release").join("balatro-vs");
-
-        //copy the lovely patch to the mods folder
-        let lovely_mod_folder = dirs::data_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap())
-            .join("Balatro")
-            .join("Mods")
-            .join("balatro-vs");
-
-        let res = copy_directory(&lovely_patch_path, &lovely_mod_folder);
-        if let Err(e) = res {
-            error!("[Updater] Failed to copy the lovely patch: {:?}", e);
-        }
-
-        //copy the main dll to the game folder
-        let target_path = std::env::current_dir().unwrap().join("winmm.dll");
-
-        let current_pid = std::process::id();
-
         #[cfg(target_os = "windows")]
-        let script_content = format!(
-            r#"
-                @echo off
-                :wait_loop
-                tasklist /FI "PID eq {pid}" 2>NUL | find /I /N "{pid}">NUL
-                if "%ERRORLEVEL%"=="0" (
-                    timeout /T 5 >NUL
-                    goto wait_loop
-                )
-                copy "{src}" "{dst}"
-                if %errorlevel% neq 0 (
-                    echo Failed to copy file.
-                    exit /b %errorlevel%
-                )
-                rmdir /S /Q "{extract_path}"
-                del "%~f0"
-            "#,
-            pid = current_pid,
-            src = main_dll_path.display(),
-            dst = target_path.display(),
-            extract_path = extract_path.display()
-        );
+        {
+            //unzip the downloaded zip
+            let download_path = dirs::download_dir()
+                .unwrap_or_else(|| dirs::home_dir().unwrap())
+                .join("balatro-vs.zip");
+            let extract_path = download_path.parent().unwrap().join("balatro-vs-update");
+            let res = unzip_file(&download_path.clone(), &extract_path.clone());
 
-        #[cfg(not(target_os = "windows"))]
-        let script_content = format!(
-            r#"
-                #!/bin/bash
-                while kill -0 {pid} 2>/dev/null; do
-                    sleep 5
-                done
-                cp "{src}" "{dst}"
-                if [ $? -ne 0 ]; then
-                    echo "Failed to copy file."
-                    exit 1
-                fi
-                rm -rf "{extract_path}"
-                rm -- "$0"
-            "#,
-            pid = current_pid,
-            src = main_dll_path.display(),
-            dst = target_path.display(),
-            extract_path = extract_path.display()
-        );
+            if res.is_err() {
+                error!("[Updater] Failed to unzip file {:?}", res.err());
+                return;
+            }
 
-        let script_path = std::env::current_dir()
-            .unwrap()
-            .join(if cfg!(target_os = "windows") {
-                "update_and_cleanup.bat"
-            } else {
-                "update_and_cleanup.sh"
-            });
-        let mut file = std::fs::File::create(&script_path).unwrap();
-        file.write_all(script_content.as_bytes()).unwrap();
+            let extract_path = dirs::download_dir()
+                .unwrap_or_else(|| dirs::home_dir().unwrap())
+                .join("balatro-vs-update");
+            let main_dll_path = extract_path.join("release").join("winmm.dll");
+            let lovely_patch_path = extract_path.join("release").join("balatro-vs");
 
-        #[cfg(not(target_os = "windows"))]
-        Command::new("chmod")
-            .arg("+x")
-            .arg(&script_path)
-            .output()
-            .expect("Failed to make script executable");
+            //copy the lovely patch to the mods folder
+            let lovely_mod_folder = dirs::data_dir()
+                .unwrap_or_else(|| dirs::home_dir().unwrap())
+                .join("Balatro")
+                .join("Mods")
+                .join("balatro-vs");
 
-        if cfg!(target_os = "windows") {
+            let res = copy_directory(&lovely_patch_path, &lovely_mod_folder);
+            if let Err(e) = res {
+                error!("[Updater] Failed to copy the lovely patch: {:?}", e);
+            }
+
+            //copy the main dll to the game folder
+
+            let target_path = std::env::current_dir().unwrap().join("winmm.dll");
+            let current_pid = std::process::id();
+
+            let script_content = format!(
+                r#"
+                    @echo off
+                    :wait_loop
+                    tasklist /FI "PID eq {pid}" 2>NUL | find /I /N "{pid}">NUL
+                    if "%ERRORLEVEL%"=="0" (
+                        timeout /T 5 >NUL
+                        goto wait_loop
+                    )
+                    copy "{src}" "{dst}"
+                    if %errorlevel% neq 0 (
+                        echo Failed to copy file.
+                        exit /b %errorlevel%
+                    )
+                    rmdir /S /Q "{extract_path}"
+                    del "%~f0"
+                "#,
+                pid = current_pid,
+                src = main_dll_path.display(),
+                dst = target_path.display(),
+                extract_path = extract_path.display()
+            );
+
+            let script_path = std::env::current_dir()
+                .unwrap()
+                .join("update_and_cleanup.bat");
+            let mut file = std::fs::File::create(&script_path).unwrap();
+            file.write_all(script_content.as_bytes()).unwrap();
+
             Command::new("cmd")
                 .args(&["/C", script_path.to_str().unwrap()])
                 .spawn()
                 .expect("Failed to start batch script");
-        } else {
-            Command::new("sh")
-                .arg(script_path.to_str().unwrap())
-                .spawn()
-                .expect("Failed to start shell script");
+
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    fn update_android(&self) {
+        crate::lua_print("[BVS] starting update");
+
+        let zip_path = std::env::current_dir()
+            .unwrap()
+            .join("balatro-vs-android.zip");
+
+        if !zip_path.exists() {
+            crate::lua_print(&format!("[BVS] android zip not found at {:?}", zip_path));
+            return;
         }
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        let mods_dir = std::env::current_dir().unwrap().join("Mods");
+        crate::lua_print(&format!("[BVS] Extracting to {:?}", mods_dir));
+
+        let res = unzip_file_android(&zip_path, &mods_dir);
+        if let Err(e) = res {
+            crate::lua_print(&format!("[BVS] Extraction failed: {:?}", e));
+            return;
+        }
+
+        let _ = std::fs::remove_file(&zip_path);
+        crate::lua_print("[BVS] Android update applied successfully");
     }
 
     pub fn update_current_version(&mut self) {
@@ -274,6 +283,43 @@ fn unzip_file(zip_path: &Path, extract_to: &Path) -> Result<(), Box<dyn std::err
             }
             let mut outfile = std::fs::File::create(&outpath)?;
             std::io::copy(&mut file, &mut outfile)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// For Android, we need to not overwrite the existing .so at runtime, it will be swapped next game launch
+#[cfg(target_os = "android")]
+fn unzip_file_android(
+    zip_path: &Path,
+    extract_to: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let file = std::fs::File::open(zip_path)?;
+    let mut archive = ZipArchive::new(file)?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)?;
+        let name = entry.name().to_string();
+
+        let dest_name = if name.ends_with(".so") {
+            format!("{}.new", name)
+        } else {
+            name.clone()
+        };
+
+        let outpath = extract_to.join(&dest_name);
+
+        if name.ends_with('/') {
+            std::fs::create_dir_all(&outpath)?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    std::fs::create_dir_all(&p)?;
+                }
+            }
+            let mut outfile = std::fs::File::create(&outpath)?;
+            std::io::copy(&mut entry, &mut outfile)?;
         }
     }
 

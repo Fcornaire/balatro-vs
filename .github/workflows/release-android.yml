@@ -1,10 +1,9 @@
 name: Release Android
 
 on:
-  workflow_run:
-    workflows: ["Release"]
-    types:
-      - completed
+  push:
+    tags:
+      - "*"
   workflow_dispatch:
     inputs:
       tag:
@@ -14,7 +13,6 @@ on:
 
 jobs:
   build:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -44,15 +42,29 @@ jobs:
         run: cross build --target aarch64-linux-android --features with_integrity --release
 
       - name: Set version
-        run: echo "VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}" >> $GITHUB_ENV
+        run: echo "VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}" >> $GITHUB_ENV
+
+      - name: Install patchelf
+        run: |
+          curl -L https://github.com/NixOS/patchelf/releases/download/0.15.5/patchelf-0.15.5-x86_64.tar.gz | tar -xz -C /usr/local
+
+      - name: Prepare release folder
+        run: |
+          mkdir -p balatro-vs/lovely
+          cp patchs/* balatro-vs/lovely/
+          cp core/target/aarch64-linux-android/release/libwinmm.so balatro-vs/lovely/
+          patchelf --add-needed liblove.so balatro-vs/lovely/libwinmm.so
+          sed -i 's|"protocol": "ws"|"protocol": "wss"|g' balatro-vs/lovely/bvs.json
+          sed -i 's|"host": "localhost"|"host": "live.balatro-vs-matchmaking.eu"|g' balatro-vs/lovely/bvs.json
+          sed -i 's|"port": 3536|"port": 0|g' balatro-vs/lovely/bvs.json
 
       - name: Archive
-        run: zip -j bvs-${{ env.VERSION }}-android.zip core/target/aarch64-linux-android/release/libwinmm.so
+        run: zip -r balatro-vs-${{ env.VERSION }}-android.zip balatro-vs/
 
       - name: Upload Release
         uses: ncipollo/release-action@v1.12.0
         with:
-          artifacts: "bvs-${{ env.VERSION }}-android.zip"
+          artifacts: "balatro-vs-${{ env.VERSION }}-android.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ env.VERSION }}
           allowUpdates: true

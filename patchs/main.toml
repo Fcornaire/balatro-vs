@@ -74,7 +74,18 @@ VecDeque = require('balatro-vs_utils').VecDeque
 
 local is_android = love.system.getOS() == 'Android'
 if is_android then
-	local loader, err = package.loadlib("libwinmm.so", "luaopen_winmm")
+	-- Swap in staged .so if an update was applied
+	local so_new = "Mods/balatro-vs/lovely/libwinmm.so.new"
+	local so_path = "Mods/balatro-vs/lovely/libwinmm.so"
+	if love.filesystem.getInfo("Mods/balatro-vs/lovely/libwinmm.so.new") then
+		local ok, err = os.rename(so_new, so_path)
+		if ok then
+			print("[BVS] Swapped in updated libwinmm.so")
+		else
+			print("[BVS] Failed to rename libwinmm.so.new: " .. tostring(err))
+		end
+	end
+	local loader, err = package.loadlib("Mods/balatro-vs/lovely/libwinmm.so", "luaopen_winmm")
 	if not loader then error("Failed to load winmm: " .. tostring(err)) end
 	loader()
 	print("Loaded bvs native lib winmm on Android")
