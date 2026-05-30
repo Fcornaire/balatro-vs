@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 
 [features]
 with_integrity = []
+thunderstore_build = []
 
 # [build]
 # target = "i686-pc-windows-msvc"

@@ -1,0 +1,133 @@
+name: Build and Publish to Thunderstore
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to override if needed"
+        required: true
+        default: "0.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish-thunderstore:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: core/Cargo.toml
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install tcli
+        run: dotnet tool install -g tcli
+
+      - name: Set version from tag or input
+        id: set_version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Using version: $VERSION"
+
+      - name: Update integrity
+        shell: bash
+        run: |
+          echo '#[cfg(feature = "with_integrity")]
+              pub fn get_integrity_hash() -> String {
+                  "${{ secrets.INTEGRITY_HASH }}".to_string()
+              }
+          ' > core/src/modules/integrity.rs
+          echo 'Updated with integrity hash!'
+
+      - name: Build (Thunderstore)
+        working-directory: core
+        run: cargo build --release --features with_integrity,thunderstore_build
+
+      - name: Generate thunderstore.toml
+        shell: bash
+        run: |
+          cat > thunderstore.toml << 'EOF'
+          [config]
+          schemaVersion = "0.0.1"
+
+          [package]
+          namespace = "DShad"
+          name = "BalatroVS"
+          versionNumber = "${{ env.VERSION }}"
+          description = "Balatro-vs is a network versus mod for Balatro"
+          websiteUrl = "https://github.com/Fcornaire/balatro-vs"
+          containsNsfwContent = false
+
+          [package.dependencies]
+          Thunderstore-lovely-0.9.0
+
+          [build]
+          icon = "./images/icon.png"
+          readme = "./README.md"
+          outdir = "./build"
+
+          [[build.copy]]
+          source = "./artifacts/balatro-vs"
+          target = "balatro-vs"
+
+          [publish]
+          repository = "https://thunderstore.io"
+          communities = ["balatro"]
+          categories = ["mods"]
+          EOF
+
+          echo "Generated thunderstore.toml:"
+          cat thunderstore.toml
+
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          ARTIFACTS_DIR="artifacts/balatro-vs"
+          mkdir -p "$ARTIFACTS_DIR"
+
+          cp core/target/release/winmm.dll "$ARTIFACTS_DIR/"
+
+          if [ -d "core/target/release/balatro-vs" ]; then
+            cp -r core/target/release/balatro-vs/. "$ARTIFACTS_DIR/"
+          fi
+
+          echo "Artifacts:"
+          ls -la "$ARTIFACTS_DIR"
+
+      - name: Verify icon exists
+        shell: bash
+        run: |
+          if [ ! -f "images/icon.png" ]; then
+            echo "Error: images/icon.png not found! Please add a 256x256 PNG icon."
+            exit 1
+          fi
+          echo "Icon found."
+
+      - name: Build Thunderstore package
+        run: tcli build --config-path thunderstore.toml
+
+      - name: Publish to Thunderstore
+        run: tcli publish --config-path thunderstore.toml --file build/DShad-BalatroVS-${{ env.VERSION }}.zip
+        env:
+          TCLI_AUTH_TOKEN: ${{ secrets.THUNDERSTORE_TOKEN }}

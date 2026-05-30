@@ -82,6 +82,17 @@ impl LuaPatcher {
             Ok(get_modules().lock().unwrap().updater_should_update())
         });
 
+        self.register_lua_function("updater_is_thunderstore_build", |_, ()| {
+            get_modules()
+                .lock()
+                .unwrap()
+                .updater_is_thunderstore_build()
+        });
+
+        self.register_lua_function("updater_get_last_version", |_, ()| {
+            get_modules().lock().unwrap().updater_get_last_version()
+        });
+
         self.register_lua_function("network_start_matchmaking", |_, ()| {
             get_modules().lock().unwrap().network_start_matchmaking()
         });

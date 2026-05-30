@@ -72,36 +72,59 @@ impl Modules {
 
         if current_version != last_version && !self.updater.is_updating() {
             info!(
-                "[Modules] New version available: {} (current: {})",
+                "[BVS] New version available: {} (current: {})",
                 last_version, current_version
             );
-            crate::lua_print(&format!(
-                "[BVS updater] New version available: {} (current: {}), starting download",
-                last_version, current_version
-            ));
 
-            let url = self.updater.get_base_download_url().to_string();
-            let last_version_clone = last_version.clone();
-            self.updater.set_is_updating(true);
+            #[cfg(feature = "thunderstore_build")]
+            {
+                crate::lua_print(&format!(
+                    "[BVS] New version available: {} (current: {}), please update through Thunderstore",
+                    last_version, current_version
+                ));
+                self.updater.set_should_update(true);
+                return Ok(false);
+            }
 
-            get_runtime().spawn(async move {
-                let is_success = Updater::trigger_update(&url, &last_version_clone).await;
-                if is_success {
-                    let updater = &mut get_modules().lock().unwrap().updater;
-                    updater.set_should_update(true);
-                }
-            });
+            #[cfg(not(feature = "thunderstore_build"))]
+            {
+                crate::lua_print(&format!(
+                    "[BVS] New version available: {} (current: {}), starting download",
+                    last_version, current_version
+                ));
 
-            return Ok(false);
+                let url = self.updater.get_base_download_url().to_string();
+                let last_version_clone = last_version.clone();
+                self.updater.set_is_updating(true);
+
+                get_runtime().spawn(async move {
+                    let is_success = Updater::trigger_update(&url, &last_version_clone).await;
+                    if is_success {
+                        let updater = &mut get_modules().lock().unwrap().updater;
+                        updater.set_should_update(true);
+                    }
+                });
+
+                return Ok(false);
+            }
         }
 
         Ok(current_version == last_version)
     }
 
     pub fn updater_update(&mut self) -> Result<()> {
+        #[cfg(not(feature = "thunderstore_build"))]
         self.updater.update();
 
         Ok(())
+    }
+
+    pub fn updater_is_thunderstore_build(&self) -> Result<bool> {
+        Ok(Updater::is_thunderstore_build())
+    }
+
+    pub fn updater_get_last_version(&self) -> Result<String> {
+        Ok(self.updater.get_last_version())
     }
 
     pub fn network_poll_and_update(&mut self) -> Result<()> {
