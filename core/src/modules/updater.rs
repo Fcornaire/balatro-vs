@@ -76,6 +76,10 @@ impl Updater {
         self.is_updating = is_updating;
     }
 
+    pub fn is_thunderstore_build() -> bool {
+        cfg!(feature = "thunderstore_build")
+    }
+
     pub async fn trigger_update(base_download_url: &str, last_version: &str) -> bool {
         info!("[Updater] Triggering update");
 

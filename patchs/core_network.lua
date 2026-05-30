@@ -92,6 +92,10 @@ end
 
 function on_update()
     play_sound('whoosh', 1)
+
+    local is_thunderstore = updater_is_thunderstore_build and updater_is_thunderstore_build()
+    local last_version = updater_get_last_version and updater_get_last_version() or "unknown"
+
     G.FUNCS.overlay_menu {
         definition =
             create_UIBox_generic_options({
@@ -105,41 +109,75 @@ function on_update()
                                     chosen = true,
                                     label = "Balatro versus",
                                     tab_definition_function = function()
-                                        return
-                                        {
-                                            n = G.UIT.ROOT,
-                                            config = { align = "cm", padding = 0.2, colour = G.C.BLACK, r = 0.1, emboss = 0.05, minh = 6, minw = 6 },
-                                            nodes = {
-                                                {
-                                                    n = G.UIT.R,
-                                                    config = { scale = 0.5, shadow = true },
-                                                    nodes = {
-                                                        { n = G.UIT.T, config = { text = "A new update is available !", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
-                                                    }
-                                                },
-                                                {
-                                                    n = G.UIT.R,
-                                                    config = { align = "cm", minw = 1.4, padding = 0.2 },
-                                                    nodes = {
-                                                    }
-                                                },
-                                                {
-                                                    n = G.UIT.R,
-                                                    config = { align = "cm", minw = 1.4, padding = 0.2 },
-                                                    nodes = {
-                                                        UIBox_button({
-                                                            label = { localize('ph_click_confirm') },
-                                                            button = 'updater_update_bvs',
-                                                            minw = 2.5,
-                                                            minh = 1.0,
-                                                            colour = G.C.PURPLE,
-                                                            scale = 2.5,
-                                                            col = true,
-                                                        })
-                                                    }
-                                                },
+                                        if is_thunderstore then
+                                            return
+                                            {
+                                                n = G.UIT.ROOT,
+                                                config = { align = "cm", padding = 0.2, colour = G.C.BLACK, r = 0.1, emboss = 0.05, minh = 6, minw = 6 },
+                                                nodes = {
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { scale = 0.5, shadow = true },
+                                                        nodes = {
+                                                            { n = G.UIT.T, config = { text = "Version " .. last_version .. " is available!", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                        nodes = {}
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.1 },
+                                                        nodes = {
+                                                            { n = G.UIT.T, config = { text = "Please update through Thunderstore mod manager.", scale = 0.7, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                        nodes = {}
+                                                    },
+                                                }
                                             }
-                                        }
+                                        else
+                                            return
+                                            {
+                                                n = G.UIT.ROOT,
+                                                config = { align = "cm", padding = 0.2, colour = G.C.BLACK, r = 0.1, emboss = 0.05, minh = 6, minw = 6 },
+                                                nodes = {
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { scale = 0.5, shadow = true },
+                                                        nodes = {
+                                                            { n = G.UIT.T, config = { text = "A new update is available !", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                        nodes = {
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                        nodes = {
+                                                            UIBox_button({
+                                                                label = { localize('ph_click_confirm') },
+                                                                button = 'updater_update_bvs',
+                                                                minw = 2.5,
+                                                                minh = 1.0,
+                                                                colour = G.C.PURPLE,
+                                                                scale = 2.5,
+                                                                col = true,
+                                                            })
+                                                        }
+                                                    },
+                                                }
+                                            }
+                                        end
                                     end
                                 }
                             }
