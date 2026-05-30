@@ -547,6 +547,7 @@ pattern = '''if change_context ~= 'splash' then '''
 position = "before"
 payload = '''
 if BALATRO_VS_CTX and updater_get_and_update_last_version then
+    print("[BVS] Fetching latest version ...")
     updater_get_and_update_last_version()
 end
 '''

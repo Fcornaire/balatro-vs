@@ -140,6 +140,22 @@ pub fn get_lua_state_ptrs() -> Option<&'static Arc<Mutex<Vec<AtomicPtr<lua_State
     LUA_STATE_PTRS.get()
 }
 
+pub fn lua_print(msg: &str) {
+    if let Some(states) = LUA_STATE_PTRS.get() {
+        let states = states.lock().unwrap();
+        if let Some(state_ptr) = states.first() {
+            let state = state_ptr.load(std::sync::atomic::Ordering::Relaxed);
+            if !state.is_null() {
+                let escaped = msg.replace('\\', "\\\\").replace('"', "\\\"");
+                unsafe {
+                    let patcher = lua_patcher::LuaPatcher::new(state);
+                    let _ = patcher.load_chunk(&format!("print(\"{}\")", escaped));
+                }
+            }
+        }
+    }
+}
+
 pub fn add_lua_state_ptr(ptr: AtomicPtr<lua_State>) {
     let lua_state_ptrs = LUA_STATE_PTRS.get_or_init(|| Arc::new(Mutex::new(Vec::new())));
     lua_state_ptrs.lock().unwrap().push(ptr);

@@ -51,7 +51,7 @@ G.FUNCS.versus_is_up_to_date = function(e)
 
         if updater_should_update and updater_should_update() and not BALATRO_VS_CTX.network.is_updating then
             BALATRO_VS_CTX.network.is_updating = true
-
+            print("[BVS] Update ready")
             on_update()
         end
     end

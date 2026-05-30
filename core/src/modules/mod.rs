@@ -75,6 +75,10 @@ impl Modules {
                 "[Modules] New version available: {} (current: {})",
                 last_version, current_version
             );
+            crate::lua_print(&format!(
+                "[BVS updater] New version available: {} (current: {}), starting download",
+                last_version, current_version
+            ));
 
             let url = self.updater.get_base_download_url().to_string();
             let last_version_clone = last_version.clone();
