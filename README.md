@@ -22,20 +22,31 @@ This mod feature:
 
 - Peer to peer Online 1o1 netplay (Random matchmaking and friendlies)
 - Some new disruptives jokers for interaction
-- Auto-update
+- Auto-update (disabled when installed via Thunderstore — update through the manager instead)
+- Android support
 - Probably won't work with other non cosmetic mods
 
 More info at [How 2 play](./HOW2PLAY.MD) (this will probably move to the wiki at some point)
 
+# Requirements
+
+- **[lovely-injector](https://github.com/ethangreen-dev/lovely-injector) v0.9.0** (latest to this day). Any previous version will mostly crash at startup.
+- **[Steamodded](https://github.com/Steamodded/smods) 1.0.0-beta-1620a**. The mod will not work without it. Further update might work but not guaranted as soon as they are available,will probably need some patchs adjustement. You will get a warning like this if not installed
+<p align="left">
+  <img src="images/smods_needed.png" alt="need smods" width = "600"/>
+</p>
+
 # Install
 
-This mod has only been developed and tested on windows, probably won't work on other platform (but might happen in the future ?)
+This mod has primarily been developed and tested on Windows. Android is also supported (see below). iOS support is technically possible (see also below)
 
-Also this mod was developed for the 1.0.X version, meaning it will break when an official major update drop (will need some adjustements).
+Also this mod was developed for the 1.0.X version of the game, meaning it will break when an official major update drops (will need some adjustments).
 
 Before starting, i suggest to make a backup of your current save file just in case. You can find your saves in your computer at `%AppData%/Balatro` with folder 1 to 3 being the profiles and the `settings.jkr` file being the current game settings (`steam_autocloud.vdf` is probably some steam related stuff, i think it can be ignored). Copy those somewhere to backup if needed for some reason
 
-This mod run with [lovely-injector](https://github.com/ethangreen-dev/lovely-injector) (tested on version v0.7.1):
+## Windows
+
+This mod runs with [lovely-injector](https://github.com/ethangreen-dev/lovely-injector) v0.9.0:
 
 - Start by installing [lovely-injector](https://github.com/ethangreen-dev/lovely-injector?tab=readme-ov-file#manual-installation) following the manual installation (the first two steps)
 
@@ -62,6 +73,30 @@ This mod run with [lovely-injector](https://github.com/ethangreen-dev/lovely-inj
 </p>
 
 - Enjoy ! Do not hesitate to open an [issue](https://github.com/Fcornaire/balatro-vs/issues) if you encounter a bug or something isn't working
+
+### Thunderstore
+
+A thunderstore build is a windows build, you can follow the same steps as above
+
+> [!IMPORTANT]
+
+> If you installed the mod via [Thunderstore](https://thunderstore.io/), the **auto-updater is disabled**. Updates must be applied through your Thunderstore mod manager.
+
+## Android
+
+> [!IMPORTANT]
+
+> Android support requires a Steam version of Balatro. You need to build the Android version of the game using [LMM (Lovely Mobile Maker)](https://lmm.shorty.systems/).
+
+- Follow the [LMM](https://lmm.shorty.systems/) instructions to build the Android version of your Steam copy of Balatro and install the APK on your device
+- **Launch the LMM app at least once** so it creates the external storage folder used by the mod
+- Grab the latest release zip ending in `-android` from the [releases page](https://github.com/Fcornaire/balatro-vs/releases/latest)
+- Extract the contents of the `-android` zip into the external storage folder created by the LMM app on your device into the mods folder (the path on your device need to be `Balatro/ASET/Mods/balatro-vs`)
+- Launch the game and confirm that a versus button is present at the main screen
+
+## iOS
+
+iOS support is technically feasible using [LMM (Lovely Mobile Maker)](https://lmm.shorty.systems/), but the mod need to build an additionnal native lib `winm` that i think requires a Mac, Xcode, and familiarity with the iOS build process. If you have that knowledge and would like to contribute, help is very welcome — feel free to open an issue or a pull request or ask for help!
 
 # Known issue
 

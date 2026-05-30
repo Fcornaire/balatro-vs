@@ -45,7 +45,7 @@ function on_smods_required()
                             {
                                 {
                                     chosen = true,
-                                    label = "Warning",
+                                    label = "Balatro-vs",
                                     tab_definition_function = function()
                                         return
                                         {
