@@ -499,6 +499,7 @@ match_indent = true
 times = 1
 
 # go_to_menu : Restore view when going back to main menu and reset netplay context
+# Payload update for SMODS compatibility: SMODS add a bunch of stuff to card from G.P_CENTERS, so we dont fully erase G.P_CENTERS as before
 [[patches]]
 [patches.pattern]
 target = "functions/button_callbacks.lua"
@@ -520,15 +521,36 @@ if BALATRO_VS_CTX then
         end
 
         if BALATRO_VS_CTX.progress.centers then
-            G.P_CENTERS = lume.deserialize(BALATRO_VS_CTX.progress.centers)
+            local saved_centers = lume.deserialize(BALATRO_VS_CTX.progress.centers)
+            for k, v in pairs(saved_centers) do
+                if G.P_CENTERS[k] then
+                    G.P_CENTERS[k].discovered = v.discovered
+                    G.P_CENTERS[k].unlocked = v.unlocked
+                    G.P_CENTERS[k].alerted = v.alerted
+                end
+            end
         end
 
         if BALATRO_VS_CTX.progress.blinds then
-            G.P_BLINDS = lume.deserialize(BALATRO_VS_CTX.progress.blinds)
+            local saved_blinds = lume.deserialize(BALATRO_VS_CTX.progress.blinds)
+            for k, v in pairs(saved_blinds) do
+                if G.P_BLINDS[k] then
+                    G.P_BLINDS[k].discovered = v.discovered
+                    G.P_BLINDS[k].unlocked = v.unlocked
+                    G.P_BLINDS[k].alerted = v.alerted
+                end
+            end
         end
 
         if BALATRO_VS_CTX.progress.tags then
-            G.P_TAGS = lume.deserialize(BALATRO_VS_CTX.progress.tags)
+            local saved_tags = lume.deserialize(BALATRO_VS_CTX.progress.tags)
+            for k, v in pairs(saved_tags) do
+                if G.P_TAGS[k] then
+                    G.P_TAGS[k].discovered = v.discovered
+                    G.P_TAGS[k].unlocked = v.unlocked
+                    G.P_TAGS[k].alerted = v.alerted
+                end
+            end
         end
     end
 end
