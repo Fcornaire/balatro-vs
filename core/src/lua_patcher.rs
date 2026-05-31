@@ -254,12 +254,15 @@ impl LuaPatcher {
             get_modules().lock().unwrap().network_player_skip_booster()
         });
 
-        self.register_lua_function("network_send_new_card_from_booster", |_, card_index| {
-            get_modules()
-                .lock()
-                .unwrap()
-                .network_send_new_card_from_booster(card_index)
-        });
+        self.register_lua_function(
+            "network_send_new_card_from_booster",
+            |_, card_index| {
+                get_modules()
+                    .lock()
+                    .unwrap()
+                    .network_send_new_card_from_booster(card_index)
+            },
+        );
 
         self.register_lua_function("network_send_reroll_shop", |_, ()| {
             get_modules().lock().unwrap().network_send_reroll_shop()

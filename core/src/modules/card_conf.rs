@@ -53,6 +53,9 @@ impl From<Table> for CardConf {
         let ability = table
             .get::<String>("ability".to_string())
             .unwrap_or_default();
+        let edition = table
+            .get::<String>("edition".to_string())
+            .unwrap_or_default();
 
         match type_.as_str() {
             "joker" => {
@@ -64,10 +67,6 @@ impl From<Table> for CardConf {
                     .unwrap_or(mlua::Value::Boolean(false))
                     .as_boolean()
                     .unwrap_or(false);
-                let edition = table
-                    .get::<String>("edition".to_string())
-                    .unwrap_or_default();
-
                 return CardConf {
                     type_: CardType::Joker,
                     label,
@@ -87,7 +86,7 @@ impl From<Table> for CardConf {
                     label,
                     location: "".to_string(),
                     stay_flipped: false,
-                    edition: "".to_string(),
+                    edition,
                     center,
                     card,
                     center_key,

@@ -18,6 +18,7 @@ match_indent = true
 times = 1
 
 #Some helper functions
+# Compatibility with sticky-fingers : use the stable index if present to avoid desynch caused by dragging
 [[patches]]
 [patches.pattern]
 target = "card.lua"
@@ -25,6 +26,10 @@ pattern = '''Card = Moveable:extend()'''
 position = "after"
 payload = '''
     function Card:get_index_from_area()
+        if self.area == G.pack_cards and self.bvs_pack_order then
+            return self.bvs_pack_order
+        end
+
         local index = -1
         for i, card in ipairs(self.area.cards) do
             if card == self then
@@ -171,7 +176,7 @@ function Card:opponent_open()
                     elseif self.ability.name:find('Standard') then
                         card = create_card((pseudorandom(opponent_pseudoseed('stdset'..G.GAME.opponent_round_resets.ante)) > 0.6) and "Enhanced" or "Base", G.pack_cards, nil, nil, nil, true, nil, 'sta',true)
                         local edition_rate = 2
-                        local edition = poll_edition('standard_edition'..G.GAME.opponent_round_resets.ante, edition_rate, true,nil,true)
+                        local edition = poll_edition('standard_edition'..G.GAME.opponent_round_resets.ante, edition_rate, true)
                         card:set_edition(edition)
                         local seal_rate = 10
                         local seal_poll = pseudorandom(opponent_pseudoseed('stdseal'..G.GAME.opponent_round_resets.ante))
@@ -2237,7 +2242,7 @@ function Card:opponent_use_consumeable(area, copier)
     if self.ability.name == 'Aura' then 
         G.E_MANAGER:add_event(Event({trigger = 'after', delay = 0.4, func = function()
             local over = false
-            local edition = poll_edition('aura', nil, true, true,true)
+            local edition = poll_edition('aura', nil, true, true)
             local aura_card = G.opponent_hand.highlighted[1]
             aura_card:set_edition(edition, true)
             used_tarot:juice_up(0.3, 0.5)
@@ -2528,7 +2533,7 @@ function Card:opponent_use_consumeable(area, copier)
                 elseif self.ability.name == 'Hex' then
                     edition = {polychrome = true}
                 elseif self.ability.name == 'The Wheel of Fortune' then
-                    edition = poll_edition('wheel_of_fortune', nil, true, true,true)
+                    edition = poll_edition('wheel_of_fortune', nil, true, true)
                 end
                 eligible_card:set_edition(edition, true)
                 if self.ability.name == 'The Wheel of Fortune' or self.ability.name == 'Ectoplasm' or self.ability.name == 'Hex' then check_for_unlock({type = 'have_edition'}) end

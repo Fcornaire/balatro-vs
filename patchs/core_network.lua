@@ -719,7 +719,16 @@ function on_opponent_use_consumeable_card(index, is_consumeable, highlighted_car
                                     trigger = 'after',
                                     delay = 3.0,
                                     func = function()
-                                        local card = G.pack_cards.cards[index] --Todo: fix potential crash here
+                                        local card = nil
+                                        for _, pack_card in ipairs(G.pack_cards.cards) do
+                                            if pack_card.bvs_pack_order == index then
+                                                card = pack_card
+                                                break
+                                            end
+                                        end
+                                        if not card then
+                                            card = G.pack_cards.cards[index]
+                                        end
                                         G.FUNCS.use_card({ config = { ref_table = card } }, nil, nil, true)
 
                                         return true
@@ -880,7 +889,18 @@ function on_highlighted_booster_card(highlighted_card_index)
             end
 
             --Highlight opponent card , TODO: can we have multiple cards highlighted? ?
-            local card = G.pack_cards.cards[highlighted_card_index[1]]
+            local requested_index = highlighted_card_index[1]
+            local card = nil
+            for _, pack_card in ipairs(G.pack_cards.cards) do
+                if pack_card.bvs_pack_order == requested_index then
+                    card = pack_card
+                    break
+                end
+            end
+            if not card then
+                card = G.pack_cards.cards[requested_index]
+            end
+
             if card then
                 -- card:click()
                 -- delay(0.1)

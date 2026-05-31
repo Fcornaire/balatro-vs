@@ -2,6 +2,7 @@ use card_conf::{AreaType, CardConf};
 use game_manipulation::{GameManipulation, GameManipulationEvent};
 use mlua::{Result, Table};
 use network::Network;
+use semver::Version;
 use tracing::{error, info};
 use updater::Updater;
 
@@ -70,7 +71,15 @@ impl Modules {
             return Ok(false);
         }
 
-        if current_version != last_version && !self.updater.is_updating() {
+        let current_semver = Version::parse(&current_version);
+        let last_semver = Version::parse(&last_version);
+
+        let needs_update = match (current_semver, last_semver) {
+            (Ok(current), Ok(last)) => current < last,
+            _ => false,
+        };
+
+        if needs_update && !self.updater.is_updating() {
             info!(
                 "[BVS] New version available: {} (current: {})",
                 last_version, current_version
@@ -109,7 +118,7 @@ impl Modules {
             }
         }
 
-        Ok(current_version == last_version)
+        Ok(!needs_update)
     }
 
     pub fn updater_update(&mut self) -> Result<()> {
