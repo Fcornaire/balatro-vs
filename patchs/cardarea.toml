@@ -52,6 +52,7 @@ times = 1
 # Make opponent hand and consumeable cards face down
 # Tell opponent when a new card is added
 # Also flip card when added to opponent hand
+# Compatibility with sticky-fingers : also add a stable index for pack cards to prevent desync when dragging 
 [[patches]]
 [patches.pattern]
 target = "cardarea.lua"
@@ -65,6 +66,10 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
 
     if self == G.opponent_consumeables then 
         card:flip()
+    end
+
+    if self == G.pack_cards and not card.bvs_pack_order then
+        card.bvs_pack_order = #self.cards + 1
     end
 end
 '''

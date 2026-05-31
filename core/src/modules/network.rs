@@ -708,7 +708,7 @@ impl Network {
     ) {
         let event: NetworkEvent = deserialize(&packet).unwrap();
         if !matches!(event, NetworkEvent::Ping() | NetworkEvent::Pong()) {
-            info!("Message from {peer_id}: {event:?}");
+            info!("Message from {peer_id}: {event}");
         }
 
         match event {

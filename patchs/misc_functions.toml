@@ -61,12 +61,25 @@ match_indent = true
 times = 1
 
 # init_localization : init with custom strings
+# Also prevent some vanilla strings disappearing for some reason (is sticky-fingers the issue ?)
 [[patches]]
 [patches.pattern]
 target = "functions/misc_functions.lua"
 pattern = "for k, v in pairs(G.localization.misc.quips or {}) do"
 position = "before"
 payload = '''
+      local sticky_shop_labels = {
+          ml_buy_target = {"Buy"},
+          ml_buy_and_use_target = {"Buy", "and Use"},
+          ml_open_target = {"Open"},
+          ml_redeem_target = {"Redeem"},
+      }
+  for k, v in pairs(sticky_shop_labels) do
+    if G.localization.misc.dictionary[k] == nil then
+      G.localization.misc.dictionary[k] = v
+    end
+  end
+
       local quips = {
           b_versus_opponent_rematched = {"Opponent wants a rematch.", "Play again ?"},
           b_versus_opponent_rematched_declined = {"Opponent declined rematch :("},
