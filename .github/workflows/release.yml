@@ -46,3 +46,6 @@ jobs:
           artifacts: "balatro-vs.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           generateReleaseNotes: true
+          allowUpdates: true
+          omitBodyDuringUpdate: true
+          omitNameDuringUpdate: true
