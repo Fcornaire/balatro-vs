@@ -46,7 +46,10 @@ jobs:
 
       - name: Install patchelf
         run: |
-          curl -L https://github.com/NixOS/patchelf/releases/download/0.15.5/patchelf-0.15.5-x86_64.tar.gz | tar -xz -C /usr/local
+          curl -fsSL https://github.com/NixOS/patchelf/releases/download/0.15.5/patchelf-0.15.5-x86_64.tar.gz \
+            | tar -xzO ./bin/patchelf > /usr/local/bin/patchelf
+          chmod +x /usr/local/bin/patchelf
+          patchelf --version
 
       - name: Prepare release folder
         run: |
