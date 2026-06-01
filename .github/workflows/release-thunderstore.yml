@@ -73,7 +73,7 @@ jobs:
 
           [package]
           namespace = "DShad"
-          name = "BalatroVS"
+          name = "balatroVS"
           versionNumber = "${{ env.VERSION }}"
           description = "Balatro-vs is a network versus mod for Balatro"
           websiteUrl = "https://github.com/Fcornaire/balatro-vs"
@@ -128,6 +128,6 @@ jobs:
         run: tcli build --config-path thunderstore.toml
 
       - name: Publish to Thunderstore
-        run: tcli publish --config-path thunderstore.toml --file build/DShad-BalatroVS-${{ env.VERSION }}.zip
+        run: tcli publish --config-path thunderstore.toml --file build/DShad-balatroVS-${{ env.VERSION }}.zip
         env:
           TCLI_AUTH_TOKEN: ${{ secrets.THUNDERSTORE_TOKEN }}
