@@ -170,8 +170,8 @@ impl Updater {
             }
 
             //copy the main dll to the game folder
-
-            let target_path = std::env::current_dir().unwrap().join("winmm.dll");
+            let game_dir = resolve_game_directory();
+            let target_path = game_dir.join("winmm.dll");
             let current_pid = std::process::id();
 
             let script_content = format!(
@@ -197,9 +197,7 @@ impl Updater {
                 extract_path = extract_path.display()
             );
 
-            let script_path = std::env::current_dir()
-                .unwrap()
-                .join("update_and_cleanup.bat");
+            let script_path = game_dir.join("update_and_cleanup.bat");
             let mut file = std::fs::File::create(&script_path).unwrap();
             file.write_all(script_content.as_bytes()).unwrap();
 
@@ -349,4 +347,19 @@ fn copy_directory(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_game_directory() -> std::path::PathBuf {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            return parent.to_path_buf();
+        }
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        return cwd;
+    }
+
+    std::env::temp_dir()
 }
