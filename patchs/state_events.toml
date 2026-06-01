@@ -237,7 +237,7 @@ if BALATRO_VS_CTX and BALATRO_VS_CTX.network.is_live then
             end
 
             --calculate the hand effects
-            local effects = { G.opponent_hand.cards[i]:get_end_of_round_effect() }
+            local effects = { G.opponent_hand.cards[i]:opponent_get_end_of_round_effect() }
             for k = 1, #G.opponent_jokers.cards do
                 --calculate the joker individual card effects
                 local eval = G.opponent_jokers.cards[k]:opponent_calculate_joker({

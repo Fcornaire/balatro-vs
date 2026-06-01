@@ -31,7 +31,7 @@ pub enum NetworkEvent {
     UsedConsumeableCard(usize, AreaType, Vec<usize>, Vec<CardConf>),
     VoucherUsed(CardConf),
     OpenBooster(CardConf, Vec<CardConf>),
-    HighlightedBoosterCard(Vec<usize>),
+    HighlightedBoosterCard(Vec<usize>, Option<CardConf>),
     RerollShop,
     BoughtCard(CardConf, String),
     SellCard(usize, bool),
@@ -56,7 +56,7 @@ impl fmt::Display for NetworkEvent {
             NetworkEvent::UsedConsumeableCard(_, _, _, _) => write!(f, "UsedConsumeableCard"),
             NetworkEvent::VoucherUsed(_) => write!(f, "VoucherUsed"),
             NetworkEvent::OpenBooster(_, _) => write!(f, "OpenBooster"),
-            NetworkEvent::HighlightedBoosterCard(_) => write!(f, "HighlightedBoosterCard"),
+            NetworkEvent::HighlightedBoosterCard(_, _) => write!(f, "HighlightedBoosterCard"),
             NetworkEvent::RerollShop => write!(f, "RerollShop"),
             NetworkEvent::BoughtCard(_, _) => write!(f, "BoughtCard"),
             NetworkEvent::SellCard(_, _) => write!(f, "SellCard"),
@@ -600,7 +600,7 @@ impl Network {
     pub fn player_skip_booster(&mut self) -> bool {
         debug!("[Network] Player_skip_booster");
 
-        let event = NetworkEvent::HighlightedBoosterCard(vec![]);
+        let event = NetworkEvent::HighlightedBoosterCard(vec![], None);
         if let Err(e) = self.send_event_to_opponent(event) {
             error!("[Network] Player_skip_booster : {:?}", e);
             return false;
@@ -609,10 +609,14 @@ impl Network {
         true
     }
 
-    pub fn send_new_card_from_booster(&mut self, card_index: usize) -> bool {
+    pub fn send_new_card_from_booster(
+        &mut self,
+        card_index: usize,
+        selected_card: Option<CardConf>,
+    ) -> bool {
         debug!("[Network] Send_new_card_from_booster");
 
-        let event = NetworkEvent::HighlightedBoosterCard(vec![card_index]);
+        let event = NetworkEvent::HighlightedBoosterCard(vec![card_index], selected_card);
         if let Err(e) = self.send_event_to_opponent(event) {
             error!("[Network] Send_new_card_from_booster : {:?}", e);
             return false;
@@ -963,12 +967,13 @@ impl Network {
                     }
                 }
             }
-            NetworkEvent::HighlightedBoosterCard(cards) => {
+            NetworkEvent::HighlightedBoosterCard(cards, selected_card) => {
                 debug!("[Network] Opponent highlighted booster card: {:?}", cards);
                 match self.state {
                     NetworkState::WaitForUserAction | NetworkState::WaitForOpponent(_) => {
-                        game_manipulation
-                            .register_event(GameManipulationEvent::HighlightedBoosterCard(cards));
+                        game_manipulation.register_event(
+                            GameManipulationEvent::HighlightedBoosterCard(cards, selected_card),
+                        );
                     }
                     _ => {
                         warn!(

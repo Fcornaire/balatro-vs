@@ -876,7 +876,7 @@ function on_opponent_open_booster(card_conf, shop_jokers_cards)
     }))
 end
 
-function on_highlighted_booster_card(highlighted_card_index)
+function on_highlighted_booster_card(highlighted_card_index, selected_card_conf)
     bvs_debug("Highlighting booster cards")
 
     G.E_MANAGER:add_event(Event({
@@ -902,6 +902,13 @@ function on_highlighted_booster_card(highlighted_card_index)
             end
 
             if card then
+                if selected_card_conf and selected_card_conf.edition and selected_card_conf.edition ~= '' then
+                    local selected_edition = lume.deserialize(selected_card_conf.edition)
+                    if selected_edition then
+                        card.edition = selected_edition
+                    end
+                end
+
                 -- card:click()
                 -- delay(0.1)
 
