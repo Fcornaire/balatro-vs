@@ -35,7 +35,7 @@ pub enum GameManipulationEvent {
     UsedVoucherCard(CardConf),
     OpenBooster(CardConf, Vec<CardConf>),
     OnRTTUpdated(usize),
-    HighlightedBoosterCard(Vec<usize>),
+    HighlightedBoosterCard(Vec<usize>, Option<CardConf>),
     RerollShop,
     BoughtCard(CardConf, String),
     SellCard(usize, bool),
@@ -146,7 +146,7 @@ impl GameManipulation {
             || matches!(event, GameManipulationEvent::PlayTurn(_))
             || matches!(event, GameManipulationEvent::OpenBooster(_, _))
             || matches!(event, GameManipulationEvent::EndShopAndStartNewRound)
-            || matches!(event, GameManipulationEvent::HighlightedBoosterCard(_))
+            || matches!(event, GameManipulationEvent::HighlightedBoosterCard(_, _))
             || matches!(
                 event,
                 GameManipulationEvent::UsedConsumeableCard(_, _, _, _)
@@ -325,10 +325,11 @@ impl GameManipulation {
                         (shop_jokers_cards_conf, Vec<CardConf>)
                     );
                 }
-                GameManipulationEvent::HighlightedBoosterCard(cards) => {
+                GameManipulationEvent::HighlightedBoosterCard(cards, selected_card) => {
                     execute_lua_function_with_args!(
                         "on_highlighted_booster_card",
-                        (cards, Vec<usize>)
+                        (cards, Vec<usize>),
+                        (selected_card, Option<CardConf>)
                     );
                 }
                 GameManipulationEvent::ProcessRemainingEvents => {

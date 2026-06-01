@@ -256,11 +256,11 @@ impl LuaPatcher {
 
         self.register_lua_function(
             "network_send_new_card_from_booster",
-            |_, card_index| {
+            |_, (card_index, selected_card)| {
                 get_modules()
                     .lock()
                     .unwrap()
-                    .network_send_new_card_from_booster(card_index)
+                    .network_send_new_card_from_booster(card_index, selected_card)
             },
         );
 

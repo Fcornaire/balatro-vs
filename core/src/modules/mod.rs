@@ -377,8 +377,15 @@ impl Modules {
         Ok(())
     }
 
-    pub fn network_send_new_card_from_booster(&mut self, card_index: usize) -> Result<()> {
-        let res = self.network.send_new_card_from_booster(card_index);
+    pub fn network_send_new_card_from_booster(
+        &mut self,
+        card_index: usize,
+        selected_card: Option<Table>,
+    ) -> Result<()> {
+        let selected_card = selected_card.map(CardConf::from);
+        let res = self
+            .network
+            .send_new_card_from_booster(card_index, selected_card);
 
         if !res {
             error!("[Modules] Failed to send new card from booster");

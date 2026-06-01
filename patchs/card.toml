@@ -85,6 +85,71 @@ function Card:opponent_get_chip_mult()
     end
 end
 
+
+function Card:opponent_get_end_of_round_effect(context)
+    if self.debuff then return {} end
+    local ret = {}
+    if self.ability.h_dollars > 0 then
+        ret.h_dollars = self.ability.h_dollars
+        ret.card = self
+    end
+    if self.seal == 'Blue' and #G.opponent_consumeables.cards + G.GAME.opponent_consumeable_buffer < G.opponent_consumeables.config.card_limit then
+        local card_type = 'Planet'
+        G.GAME.opponent_consumeable_buffer = G.GAME.opponent_consumeable_buffer + 1
+        G.E_MANAGER:add_event(Event({
+            trigger = 'before',
+            delay = 0.0,
+            func = (function()
+                if G.GAME.opponent_last_hand_played then
+                    local _planet = 0
+                    for k, v in pairs(G.P_CENTER_POOLS.Planet) do
+                        if v.config.hand_type == G.GAME.opponent_last_hand_played then
+                            _planet = v.key
+                        end
+                    end
+                    local card = create_card(card_type,G.opponent_consumeables, nil, nil, nil, nil, _planet, 'blusl')
+                    card:add_to_deck()
+                    G.opponent_consumeables:emplace(card)
+                    G.GAME.opponent_consumeable_buffer = 0
+                end
+                return true
+            end)}))
+        opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize('k_plus_planet'), colour = G.C.SECONDARY_SET.Planet})
+        ret.effect = true
+    end
+    return ret
+end
+
+
+function Card:opponent_calculate_seal(context)
+    if self.debuff then return nil end
+    if context.repetition then
+        if self.seal == 'Red' then
+                return {
+                    message = localize('k_again_ex'),
+                    repetitions = 1,
+                    card = self
+                }
+        end
+    end
+    if context.discard then
+        if self.seal == 'Purple' and #G.opponent_consumeables.cards + G.GAME.consumeable_buffer < G.opponent_consumeables.config.card_limit then
+            G.GAME.opponent_consumeable_buffer = G.GAME.opponent_consumeable_buffer + 1
+            G.E_MANAGER:add_event(Event({
+                trigger = 'before',
+                delay = 0.0,
+                func = (function()
+                        local card = create_card('Tarot',G.opponent_consumeables, nil, nil, nil, nil, nil, '8ba')
+                        card:add_to_deck()
+                        G.opponent_consumeables:emplace(card)
+                        G.GAME.opponent_consumeable_buffer = 0
+                    return true
+                end)}))
+            opponent_card_eval_status_text(self, 'extra', nil, nil, nil, {message = localize('k_plus_tarot'), colour = G.C.PURPLE})
+        end
+    end
+end
+
 --For some reason, using self.eligible_strength_jokers can be nil for some reason ,so we get it manually ¯\_(ツ)_/¯
 function Card:get_eligible_strength()
     local eligible_strength_jokers = {}

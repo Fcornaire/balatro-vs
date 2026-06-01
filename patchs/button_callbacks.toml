@@ -139,7 +139,7 @@ payload = '''
         end
 
         if card.ability.set == 'Joker' then
-            G.FUNCS.network_send_new_card_from_booster(index)
+            G.FUNCS.network_send_new_card_from_booster(index, card:to_card_conf('joker'))
         end
 
         if card.ability.set == 'Booster' then
@@ -151,7 +151,7 @@ payload = '''
         end
 
         if card.ability.set == 'Enhanced' or card.ability.set == 'Default' then
-            G.FUNCS.network_send_new_card_from_booster(index)
+            G.FUNCS.network_send_new_card_from_booster(index, card:to_card_conf('card'))
         end
     end
 '''

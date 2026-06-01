@@ -343,7 +343,7 @@ G.FUNCS.opponent_evaluate_play = function()
 
     G.GAME.opponent_hands[text].played = G.GAME.opponent_hands[text].played + 1
     G.GAME.opponent_hands[text].played_this_round = G.GAME.opponent_hands[text].played_this_round + 1
-    G.GAME.last_hand_played = text
+    G.GAME.opponent_last_hand_played = text
     G.GAME.opponent_hands[text].visible = true
 
     --Add all the pure bonus cards to the scoring hand
@@ -1633,7 +1633,7 @@ G.FUNCS.opponent_discard_cards_from_highlighted = function(e, hook)
         local cards = {}
         local destroyed_cards = {}
         for i = 1, highlighted_count do
-            G.opponent_hand.highlighted[i]:calculate_seal({ discard = true })
+            G.opponent_hand.highlighted[i]:opponent_calculate_seal({ discard = true })
             local removed = false
             for j = 1, #G.opponent_jokers.cards do
                 local eval = nil
@@ -1702,7 +1702,7 @@ function opponent_eval_card(card, context)
     local ret = {}
 
     if context.repetition_only then
-        local seals = card:calculate_seal(context)
+        local seals = card:opponent_calculate_seal(context)
         if seals then
             ret.seals = seals
         end
@@ -2030,9 +2030,9 @@ G.FUNCS.network_player_skip_booster = function()
     end
 end
 
-G.FUNCS.network_send_new_card_from_booster = function(index)
+G.FUNCS.network_send_new_card_from_booster = function(index, selected_card_conf)
     if network_send_new_card_from_booster then
-        network_send_new_card_from_booster(index)
+        network_send_new_card_from_booster(index, selected_card_conf)
     end
 end
 
