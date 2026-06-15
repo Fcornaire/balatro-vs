@@ -29,6 +29,18 @@ G.FUNCS.versus_friendlies_start_pairing = function(e)
 end
 
 G.FUNCS.versus_is_up_to_date = function(e)
+    if (BALATRO_VS_WINMM_INSTALLED or BALATRO_VS_WINMM_INSTALL_FAILED or BALATRO_VS_WINMM_MISSING) and not BALATRO_VS_WINMM_SHOWN then
+        BALATRO_VS_WINMM_SHOWN = true
+        e.config.colour = G.C.UI.BACKGROUND_INACTIVE
+        e.config.button = nil
+        if BALATRO_VS_WINMM_MISSING then
+            on_winmm_missing()
+        else
+            on_winmm_installed()
+        end
+        return
+    end
+
     if BALATRO_VS_CTX then
         if BALATRO_VS_CTX.network.is_updating then
             return
@@ -61,6 +73,10 @@ G.FUNCS.updater_update_bvs = function()
     if updater_update then
         G.FUNCS.quit()
     end
+end
+
+G.FUNCS.bvs_winmm_quit = function()
+    G.FUNCS.quit()
 end
 
 G.FUNCS.network_wait_for_next_action = function()
