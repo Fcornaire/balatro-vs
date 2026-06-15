@@ -280,6 +280,221 @@ function backup_progress()
     }
 end
 
+function bvs_install_lib()
+    local game_dir = love.filesystem.getSourceBaseDirectory()
+    if not game_dir then return end
+    local dest = game_dir .. "/winmm.dll"
+
+    local existing = io.open(dest, "rb")
+    if existing then
+        existing:close()
+        return
+    end
+
+    local src = nil
+    for _, p in ipairs({ "Mods/balatro-vs/winmm.dll", "Mods/winmm.dll" }) do
+        if love.filesystem.getInfo(p) then
+            src = p
+            break
+        end
+    end
+
+    if not src then
+        print("[BVS] winmm.dll missing from both the game folder and Mods")
+        BALATRO_VS_WINMM_MISSING = true
+        return
+    end
+
+    local data = love.filesystem.read(src)
+    if not data then
+        print("[BVS] Failed to read " .. src)
+        BALATRO_VS_WINMM_INSTALL_FAILED = true
+        return
+    end
+
+    local out, err = io.open(dest, "wb")
+    if not out then
+        print("[BVS] Could not open " .. dest .. " : " .. tostring(err))
+        BALATRO_VS_WINMM_INSTALL_FAILED = true
+        return
+    end
+
+    local ok = out:write(data)
+    out:close()
+    if ok then
+        love.filesystem.remove(src)
+        print("[BVS] Installed winmm.dll")
+        BALATRO_VS_WINMM_INSTALLED = true
+    else
+        print("[BVS] Failed to write winmm.dll to " .. dest)
+        BALATRO_VS_WINMM_INSTALL_FAILED = true
+    end
+end
+
+function on_winmm_installed()
+    play_sound('whoosh', 1)
+
+    local failed = BALATRO_VS_WINMM_INSTALL_FAILED and not BALATRO_VS_WINMM_INSTALLED
+
+    G.FUNCS.overlay_menu {
+        definition =
+            create_UIBox_generic_options({
+                back_func = 'bvs_winmm_quit',
+                contents = {
+                    create_tabs(
+                        {
+                            scale = 1.5,
+                            tabs =
+                            {
+                                {
+                                    chosen = true,
+                                    label = "Balatro versus",
+                                    tab_definition_function = function()
+                                        if failed then
+                                            return
+                                            {
+                                                n = G.UIT.ROOT,
+                                                config = { align = "cm", padding = 0.2, colour = G.C.BLACK, r = 0.1, emboss = 0.05, minh = 6, minw = 6 },
+                                                nodes = {
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { scale = 0.5, shadow = true },
+                                                        nodes = {
+                                                            { n = G.UIT.T, config = { text = "Could not auto-install winmm.dll (mod file).", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                        nodes = {}
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.1 },
+                                                        nodes = {
+                                                            { n = G.UIT.T, config = { text = "Please copy winmm.dll from your Mods\\balatro-vs folder", scale = 0.7, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.1 },
+                                                        nodes = {
+                                                            { n = G.UIT.T, config = { text = "into your Balatro game folder, then restart or reinstall the mod.", scale = 0.7, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                        nodes = {}
+                                                    },
+                                                }
+                                            }
+                                        else
+                                            return
+                                            {
+                                                n = G.UIT.ROOT,
+                                                config = { align = "cm", padding = 0.2, colour = G.C.BLACK, r = 0.1, emboss = 0.05, minh = 6, minw = 6 },
+                                                nodes = {
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { scale = 0.5, shadow = true },
+                                                        nodes = {
+                                                            { n = G.UIT.T, config = { text = "Installation is now complete!", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                        nodes = {}
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.1 },
+                                                        nodes = {
+                                                            { n = G.UIT.T, config = { text = "Please restart Balatro to finish.", scale = 0.7, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                        }
+                                                    },
+                                                    {
+                                                        n = G.UIT.R,
+                                                        config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                        nodes = {}
+                                                    },
+                                                }
+                                            }
+                                        end
+                                    end
+                                }
+                            }
+                        }),
+                }
+            })
+    }
+end
+
+function on_winmm_missing()
+    play_sound('whoosh', 1)
+
+    G.FUNCS.overlay_menu {
+        definition =
+            create_UIBox_generic_options({
+                back_func = 'bvs_winmm_quit',
+                contents = {
+                    create_tabs(
+                        {
+                            scale = 1.5,
+                            tabs =
+                            {
+                                {
+                                    chosen = true,
+                                    label = "Balatro versus",
+                                    tab_definition_function = function()
+                                        return
+                                        {
+                                            n = G.UIT.ROOT,
+                                            config = { align = "cm", padding = 0.2, colour = G.C.BLACK, r = 0.1, emboss = 0.05, minh = 6, minw = 6 },
+                                            nodes = {
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { scale = 0.5, shadow = true },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "Some mod files are missing.", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                    nodes = {}
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", minw = 1.4, padding = 0.1 },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "Please reinstall the mod through Thunderstore,", scale = 0.7, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", minw = 1.4, padding = 0.1 },
+                                                    nodes = {
+                                                        { n = G.UIT.T, config = { text = "or follow the manual install steps in the README (Github or Thunderstore).", scale = 0.7, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                    }
+                                                },
+                                                {
+                                                    n = G.UIT.R,
+                                                    config = { align = "cm", minw = 1.4, padding = 0.2 },
+                                                    nodes = {}
+                                                },
+                                            }
+                                        }
+                                    end
+                                }
+                            }
+                        }),
+                }
+            })
+    }
+end
+
 BALATRO_VS_CTX = {
     network = {
         has_confirmed_matchmaking = false,

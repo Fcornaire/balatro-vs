@@ -91,6 +91,14 @@ if is_android then
 	print("Loaded bvs native lib winmm on Android")
 end
 
+local is_windows = love.system.getOS() == 'Windows'
+if is_windows then
+	local ok, err = pcall(bvs_install_lib)
+	if not ok then
+		print("[BVS] winmm auto-install error: " .. tostring(err))
+	end
+end
+
 ORIG_RENDER_SCALE = {
       TILE_W = G.TILE_W,
       TILE_H = G.TILE_H,
@@ -157,26 +165,28 @@ if BALATRO_VS_CTX then
 
         BALATRO_VS_CTX.network.should_reset = false
     end
-    network_poll_and_update()
-    if BALATRO_VS_CTX.network.is_live then
-        if BALATRO_VS_CTX.network.has_opponent_maestro_and_highlighted_cards then
-            -- get highlighted hand
-            local highlighted_cards = G.hand:get_highlighted_cards_index()
+    if network_poll_and_update then
+        network_poll_and_update()
+        if BALATRO_VS_CTX.network.is_live then
+            if BALATRO_VS_CTX.network.has_opponent_maestro_and_highlighted_cards then
+                -- get highlighted hand
+                local highlighted_cards = G.hand:get_highlighted_cards_index()
 
-            if network_send_highlighted_card ~= nil then
-                network_send_highlighted_card(highlighted_cards)
+                if network_send_highlighted_card ~= nil then
+                    network_send_highlighted_card(highlighted_cards)
+                end
+
+                BALATRO_VS_CTX.network.has_opponent_maestro_and_highlighted_cards = false
             end
-
-            BALATRO_VS_CTX.network.has_opponent_maestro_and_highlighted_cards = false
         end
-    end
-    if BALATRO_VS_CTX.timer and not BALATRO_VS_CTX.timer:is_paused() then
-        BALATRO_VS_CTX.timer:update(run_time)
-        local pretty_time = BALATRO_VS_CTX.timer:update_and_get_pretty_time_left()
-        if pretty_time then
-            update_message_instant(pretty_time, 1.5)
+        if BALATRO_VS_CTX.timer and not BALATRO_VS_CTX.timer:is_paused() then
+            BALATRO_VS_CTX.timer:update(run_time)
+            local pretty_time = BALATRO_VS_CTX.timer:update_and_get_pretty_time_left()
+            if pretty_time then
+                update_message_instant(pretty_time, 1.5)
+            end
         end
-    end
+    end    
 end
 
 '''
