@@ -22,7 +22,7 @@ This mod feature:
 
 - Peer to peer Online 1o1 netplay (Random matchmaking and friendlies)
 - Some new disruptives jokers for interaction
-- Auto-update (disabled when installed via Thunderstore — update through the manager instead)
+- Auto-update (disabled when installed via Thunderstore)
 - Android support
 - Probably won't work with other non cosmetic mods
 
