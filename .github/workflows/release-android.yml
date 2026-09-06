@@ -19,6 +19,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Set version
+        run: echo "VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}" >> $GITHUB_ENV
+
+      - name: Check version
+        uses: ./.github/actions/check-version
+        with:
+          version: ${{ env.VERSION }}
+
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -40,9 +48,6 @@ jobs:
       - name: Build
         working-directory: core
         run: cross build --target aarch64-linux-android --features with_integrity --release
-
-      - name: Set version
-        run: echo "VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}" >> $GITHUB_ENV
 
       - name: Install patchelf
         run: |
