@@ -1,0 +1,31 @@
+[package]
+name = "balatro-vs-nx"
+version = "0.1.0"
+edition = "2021"
+description = "balatro-vs core on top of lovely-injector-nx"
+
+[workspace]
+
+[package.metadata.skyline]
+titleid = "0100CD801CE5E000" # Balatro
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+skyline = "0.6.0"
+lovely-nx-api = { git = "https://github.com/Fcornaire/lovely-injector-nx", branch = "main" }
+bvs_core = { package = "balatro-vs", path = "../core", default-features = false, features = ["relay", "nx"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+getrandom02 = { package = "getrandom", version = "0.2", features = ["custom"] }
+
+[features]
+with_integrity = ["bvs_core/with_integrity"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true

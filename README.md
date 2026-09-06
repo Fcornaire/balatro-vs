@@ -24,6 +24,7 @@ This mod feature:
 - Some new disruptives jokers for interaction
 - Auto-update (disabled when installed via Thunderstore)
 - Android support
+- Nintendo Switch support (modded console)
 - Probably won't work with other non cosmetic mods
 
 More info at [How 2 play](./HOW2PLAY.MD) (this will probably move to the wiki at some point)
@@ -38,7 +39,7 @@ More info at [How 2 play](./HOW2PLAY.MD) (this will probably move to the wiki at
 
 # Install
 
-This mod has primarily been developed and tested on Windows. Android is also supported (see below). iOS support is technically possible (see also below)
+This mod has primarily been developed and tested on Windows. Android and Nintendo Switch are also supported (see below). iOS support is technically possible (see also below)
 
 Also this mod was developed for the 1.0.X version of the game, meaning it will break when an official major update drops (will need some adjustments).
 
@@ -91,6 +92,21 @@ A thunderstore build is a windows build, you can follow the same steps as above
 - Grab the latest release zip ending in `-android` from the [releases page](https://github.com/Fcornaire/balatro-vs/releases/latest)
 - Extract the contents of the `-android` zip into the external storage folder created by the LMM app on your device into the mods folder (the path on your device need to be `Balatro/ASET/Mods/balatro-vs`)
 - Launch the game and confirm that a versus button is present at the main screen
+
+## Nintendo Switch
+
+> [!IMPORTANT]
+> Requires a modded console running [Atmosphère](https://github.com/Atmosphere-NX/Atmosphere) and the Switch version of Balatro (tested on 1.1.3 , on the switch firmware 22.5.0). Use at your own risk.
+
+On the console the mod is a [skyline](https://github.com/skyline-dev/skyline) plugin. It runs next to [lovely-injector-nx](https://github.com/Fcornaire/lovely-injector-nx), which brings lovely and Steamodded to the Switch and hands the game to the mod.
+
+- Install [lovely-injector-nx](https://github.com/Fcornaire/lovely-injector-nx) following its README
+- Grab the latest release zip ending in `-switch` from the [releases page](https://github.com/Fcornaire/balatro-vs/releases/latest) and extract it at the root of the SD card: it adds the `libbalatro_vs_nx.nro` plugin and the `Balatro/Mods/balatro-vs` mod folder (lovely patches)
+- Launch the game and confirm that a versus button is present at the main screen
+
+Switch x Windows and Switch x Android work !
+
+More info [Switch README](./nx/README.md)
 
 ## iOS
 

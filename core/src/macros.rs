@@ -1,47 +1,26 @@
+//! Native -> Lua call helpers
 pub mod macros {
+    /// Call a global Lua function without arguments
     macro_rules! call_lua_function {
-        ($chunk:expr) => {{
-            let lua_states = get_lua_state_ptrs().unwrap().lock().unwrap();
-            let state = lua_states[0].load(std::sync::atomic::Ordering::Relaxed);
-            unsafe {
-                let lua_patcher = LuaPatcher::new(state);
-                let res = lua_patcher.call_fn($chunk);
-                if let Err(e) = res {
-                    error!("[LuaPatcher] Failed to call fn {}: {}", $chunk, e);
-                }
-            }
+        ($name:expr) => {{
+            crate::bridge::call_lua_logged($name, vec![]);
         }};
     }
 
     macro_rules! execute_lua_function_with_args {
-        ($fn_to_call:expr, $(($arg:expr, $arg_type:ty)),*) => {{
-            let lua_states = get_lua_state_ptrs().unwrap().lock().unwrap();
-            let state = lua_states[0].load(std::sync::atomic::Ordering::Relaxed);
-            unsafe {
-                let lua_patcher = LuaPatcher::new(state);
-                let res = lua_patcher.execute_lua_function_with_args::<($($arg_type),*)>($fn_to_call, ($($arg),*));
-
-                if let Err(e) = res {
-                    error!("[LuaPatcher] Failed to execute fn {}: {}", $fn_to_call, e);
-                }
-            }
+        ($name:expr, $(($arg:expr, $arg_type:ty)),* $(,)?) => {{
+            let args: Vec<serde_json::Value> = vec![$({
+                let v: $arg_type = $arg;
+                crate::bridge::ToLua::to_lua(&v)
+            }),*];
+            crate::bridge::call_lua_logged($name, args);
         }};
     }
 
+    /// Call and decode the result
     macro_rules! execute_lua_function_with_result {
-        ($fn_to_call:expr, $result_type:ty) => {{
-            let lua_states = get_lua_state_ptrs().unwrap().lock().unwrap();
-            let state = lua_states[0].load(std::sync::atomic::Ordering::Relaxed);
-            unsafe {
-                let lua_patcher = LuaPatcher::new(state);
-                let res = lua_patcher.execute_lua_function_with_result::<$result_type>($fn_to_call);
-
-                if let Err(e) = res.clone() {
-                    error!("[LuaPatcher] Failed to call fn {}: {}", $fn_to_call, e);
-                }
-
-                res.unwrap()
-            }
+        ($name:expr, $result_type:ty) => {{
+            crate::bridge::call_lua_result::<$result_type>($name)
         }};
     }
 

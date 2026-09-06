@@ -1,27 +1,38 @@
-pub mod lua_patcher;
+pub mod bridge;
 pub mod macros;
 pub mod modules;
+pub mod transport;
 
-use lua_patcher::LuaPatcher;
-use matchbox_socket::WebRtcSocket;
 use modules::bvs::BvsConfig;
 use modules::Modules;
 use once_cell::sync::OnceCell;
-use std::ffi::c_void;
-use std::fs;
-use std::sync::atomic::AtomicPtr;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, error, warn};
+use transport::Transport;
 
-use mlua::lua_State;
+pub use bridge::lua_print;
+
+static THREAD_START_HOOK: OnceCell<fn()> = OnceCell::new();
+
+pub fn set_thread_start_hook(hook: fn()) {
+    let _ = THREAD_START_HOOK.set(hook);
+}
+
+pub(crate) fn run_thread_start_hook() {
+    if let Some(hook) = THREAD_START_HOOK.get() {
+        hook();
+    }
+}
 
 pub fn get_bvs_config() -> &'static Arc<BvsConfig> {
     static INSTANCE: OnceCell<Arc<BvsConfig>> = OnceCell::new();
     INSTANCE.get_or_init(|| {
-        #[cfg(any(target_os = "windows"))]
+        #[cfg(target_os = "windows")]
         {
-            if let Some(app_data_dir) = dirs::data_dir() {
-                let mod_folder = app_data_dir
+            use std::fs;
+            use std::path::PathBuf;
+            if let Ok(app_data_dir) = std::env::var("APPDATA") {
+                let mod_folder = PathBuf::from(app_data_dir)
                     .join("Balatro")
                     .join("Mods")
                     .join("balatro-vs")
@@ -42,8 +53,9 @@ pub fn get_bvs_config() -> &'static Arc<BvsConfig> {
             panic!("[bvs_config] Could not find app data directory");
         }
 
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(not(target_os = "windows"))]
         {
+            // Android and Switch, the Lua side knows where the mod folder is
             use crate::macros::macros::execute_lua_function_with_result;
 
             let bvs_conf = execute_lua_function_with_result!("get_bvs_json", String);
@@ -74,53 +86,27 @@ pub fn reset_modules() {
     *modules.lock().unwrap() = Modules::init();
 }
 
-static WEBRTCSOCKET: OnceCell<Arc<Mutex<Option<WebRtcSocket>>>> = OnceCell::new();
-static LUA_STATE_PTRS: OnceCell<Arc<Mutex<Vec<AtomicPtr<lua_State>>>>> = OnceCell::new();
+/// The connection to the opponent (WebRTC socket or relay client)
+static TRANSPORT: OnceCell<Arc<Mutex<Option<Transport>>>> = OnceCell::new();
+
+/// True once a transport exists and its background routine has ended
+pub fn is_ws_routine_finished() -> bool {
+    match TRANSPORT.get() {
+        Some(transport) => match transport.lock() {
+            Ok(guard) => guard
+                .as_ref()
+                .map(|t| !t.is_routine_running())
+                .unwrap_or(false),
+            Err(_) => false,
+        },
+        None => false,
+    }
+}
+
+#[cfg(not(target_os = "switch"))]
 static RUNTIME: OnceCell<tokio::runtime::Runtime> = OnceCell::new();
 
-//TODO: Find a better way to handle this, don't like relying on static mut
-static mut WEBRTCSOCKET_ROUTINE_HANDLE: OnceCell<Arc<Mutex<Option<std::thread::JoinHandle<()>>>>> =
-    OnceCell::new();
-
-#[allow(static_mut_refs)]
-pub fn init_or_reset_ws_routine_handle(handle: std::thread::JoinHandle<()>) {
-    unsafe {
-        if let Some(_) = WEBRTCSOCKET_ROUTINE_HANDLE.get() {
-            reset_ws_routine_handle();
-        }
-
-        let handle = Arc::new(Mutex::new(Some(handle)));
-        match WEBRTCSOCKET_ROUTINE_HANDLE.set(handle) {
-            Ok(_) => {}
-            Err(e) => error!("[Network] Failed to set WS routine handle: {:#?}", e),
-        }
-    }
-}
-
-#[allow(static_mut_refs)]
-pub fn is_ws_routine_finished() -> bool {
-    unsafe {
-        if let Some(handle) = WEBRTCSOCKET_ROUTINE_HANDLE.get() {
-            let handle_lock = handle.lock().unwrap();
-            let res = handle_lock.as_ref();
-            if let Some(_handle) = res {
-                _handle.is_finished()
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-}
-
-#[allow(static_mut_refs)]
-pub fn reset_ws_routine_handle() {
-    unsafe {
-        WEBRTCSOCKET_ROUTINE_HANDLE.take();
-    }
-}
-
+#[cfg(not(target_os = "switch"))]
 pub fn get_runtime() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| {
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -132,79 +118,95 @@ pub fn get_runtime() -> &'static tokio::runtime::Runtime {
     })
 }
 
-pub fn get_ws() -> Option<&'static Arc<Mutex<Option<WebRtcSocket>>>> {
-    WEBRTCSOCKET.get()
+pub fn get_transport() -> Option<&'static Arc<Mutex<Option<Transport>>>> {
+    TRANSPORT.get()
 }
 
-pub fn get_lua_state_ptrs() -> Option<&'static Arc<Mutex<Vec<AtomicPtr<lua_State>>>>> {
-    LUA_STATE_PTRS.get()
-}
-
-pub fn lua_print(msg: &str) {
-    if let Some(states) = LUA_STATE_PTRS.get() {
-        let states = states.lock().unwrap();
-        if let Some(state_ptr) = states.first() {
-            let state = state_ptr.load(std::sync::atomic::Ordering::Relaxed);
-            if !state.is_null() {
-                let escaped = msg.replace('\\', "\\\\").replace('"', "\\\"");
-                unsafe {
-                    let patcher = lua_patcher::LuaPatcher::new(state);
-                    let _ = patcher.load_chunk(&format!("print(\"{}\")", escaped));
-                }
-            }
-        }
-    }
-}
-
-pub fn add_lua_state_ptr(ptr: AtomicPtr<lua_State>) {
-    let lua_state_ptrs = LUA_STATE_PTRS.get_or_init(|| Arc::new(Mutex::new(Vec::new())));
-    lua_state_ptrs.lock().unwrap().push(ptr);
-}
-
-pub fn set_ws(socket: WebRtcSocket) {
-    if WEBRTCSOCKET.get().is_some() && WEBRTCSOCKET.get().unwrap().lock().unwrap().is_some() {
-        warn!("[Network] WS Socket already set");
+pub fn set_transport(transport: Transport) {
+    if TRANSPORT.get().is_some() && TRANSPORT.get().unwrap().lock().unwrap().is_some() {
+        warn!("[Network] transport already set");
         return;
     }
 
-    if WEBRTCSOCKET.get().is_none() {
-        match WEBRTCSOCKET.set(Arc::new(Mutex::new(Some(socket)))) {
-            Ok(_) => debug!("[Network] WS Socket setted"),
-            Err(_) => error!("[Network] Failed to set WS socket"),
+    if TRANSPORT.get().is_none() {
+        match TRANSPORT.set(Arc::new(Mutex::new(Some(transport)))) {
+            Ok(_) => debug!("[Network] transport set"),
+            Err(_) => error!("[Network] failed to set the transport"),
         }
     } else {
-        WEBRTCSOCKET.get().unwrap().lock().unwrap().replace(socket);
-        debug!("[Network] WS Socket replaced");
+        TRANSPORT.get().unwrap().lock().unwrap().replace(transport);
+        debug!("[Network] transport replaced");
     }
 }
 
-pub fn reset_ws() {
-    if WEBRTCSOCKET.get().is_none() {
-        warn!("[Network] WS Socket already reset");
+pub fn reset_transport() {
+    if TRANSPORT.get().is_none() {
+        warn!("[Network] transport already reset");
         return;
     }
 
-    if let Some(socket) = WEBRTCSOCKET.get() {
-        match socket.lock() {
-            Ok(mut socket) => {
-                socket.take();
+    if let Some(transport) = TRANSPORT.get() {
+        match transport.lock() {
+            Ok(mut transport) => {
+                transport.take();
             }
             Err(poison) => {
-                let mut socket = poison.into_inner();
-                socket.take();
+                let mut transport = poison.into_inner();
+                transport.take();
             }
         }
     }
 
-    reset_ws_routine_handle();
-
-    debug!("[Network] WS Socket reset");
+    debug!("[Network] transport reset");
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "mlua"))]
+fn init_tracing_with_file() {
+    use tracing_subscriber::prelude::*;
+
+    let console = tracing_subscriber::fmt::layer()
+        .compact()
+        .with_thread_names(true)
+        .with_target(true)
+        .with_ansi(false); // lovely console doesn't support ANSI
+
+    let file = std::env::var("APPDATA").ok().and_then(|appdata| {
+        let path = std::path::PathBuf::from(appdata)
+            .join("Balatro")
+            .join("Mods")
+            .join("balatro-vs")
+            .join("bvs.log");
+        std::fs::File::create(path).ok()
+    });
+
+    let file_layer = file.map(|f| {
+        tracing_subscriber::fmt::layer()
+            .compact()
+            .with_thread_names(true)
+            .with_target(true)
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(f))
+    });
+
+    let file_filter = tracing_subscriber::filter::Targets::new()
+        .with_default(tracing::Level::INFO)
+        .with_target("winmm", tracing::Level::DEBUG)
+        .with_target("matchbox_socket", tracing::Level::DEBUG);
+
+    let _ = tracing_subscriber::registry()
+        .with(console.with_filter(tracing_subscriber::filter::LevelFilter::INFO))
+        .with(file_layer.map(|l| l.with_filter(file_filter)))
+        .try_init();
+}
+
+/// Windows `winmm.dll` proxy, hooks `luaL_newstate` and installs the
+/// bridge into every state the game creates
+#[cfg(all(target_os = "windows", feature = "mlua"))]
 mod windows_symbols {
     use super::*;
+    use mlua::lua_State;
     use retour::static_detour;
+    use std::ffi::c_void;
     use windows::core::{s, w};
     use windows::Win32::Foundation::HINSTANCE;
     use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
@@ -217,15 +219,11 @@ mod windows_symbols {
         debug!("New lua state to hook!");
 
         let state = LuaLNewState_Detour.call();
-        add_lua_state_ptr(AtomicPtr::new(state));
-
-        let patcher = LuaPatcher::new(state);
-        patcher.patch_lua_state();
+        bridge::mlua::install_state(state);
 
         state
     }
 
-    #[cfg(target_os = "windows")]
     #[no_mangle]
     #[allow(non_snake_case)]
     unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -> u8 {
@@ -233,13 +231,7 @@ mod windows_symbols {
             return 1;
         }
 
-        tracing_subscriber::fmt()
-            .compact()
-            .with_thread_names(true)
-            .with_target(true)
-            .with_max_level(tracing::Level::INFO)
-            .with_ansi(false) // lovely console doesn't support ANSI ¯\_(ツ)_/¯
-            .init();
+        init_tracing_with_file();
 
         let handle = LoadLibraryW(w!("lua51.dll")).unwrap();
         let proc_newstate = GetProcAddress(handle, s!("luaL_newstate")).unwrap();
@@ -256,9 +248,11 @@ mod windows_symbols {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+/// Android / Linux, loaded from Lua with `package.loadlib`
+#[cfg(all(any(target_os = "linux", target_os = "android"), feature = "mlua"))]
 mod linux_symbols {
     use super::*;
+    use mlua::lua_State;
 
     #[no_mangle]
     pub unsafe extern "C" fn luaopen_winmm(lua: *mut lua_State) -> i32 {
@@ -268,9 +262,7 @@ mod linux_symbols {
             .with_ansi(false)
             .init();
 
-        add_lua_state_ptr(AtomicPtr::new(lua));
-        let patcher = LuaPatcher::new(lua);
-        patcher.patch_lua_state();
+        bridge::mlua::install_state(lua);
 
         0
     }

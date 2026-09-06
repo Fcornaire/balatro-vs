@@ -8,7 +8,10 @@ use std::{
 fn main() {
     println!("cargo:rerun-if-changed=NULL");
 
-    #[cfg(target_os = "windows")]
+    if var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+
     forward_dll::forward_dll("C:\\Windows\\System32\\winmm.dll").unwrap();
 
     let paths = read_dir("../patchs").unwrap();
@@ -29,22 +32,32 @@ fn main() {
         }
     }
 
-    if let Some(balatro_game_path) = var("BALATRO_GAME_PATH").ok() {
-        copy(
-            "target/debug/winmm.dll",
-            format!("{}\\winmm.dll", balatro_game_path),
-        )
-        .unwrap();
+    if profile == "debug" {
+        if let Some(balatro_game_path) = var("BALATRO_GAME_PATH").ok() {
+            let src = Path::new("target/debug/winmm.dll");
+            let dst = format!("{}\\winmm.dll", balatro_game_path);
+            let newer = match (fs::metadata(src), fs::metadata(&dst)) {
+                (Ok(s), Ok(d)) => match (s.modified(), d.modified()) {
+                    (Ok(s), Ok(d)) => s > d,
+                    _ => false,
+                },
+                (Ok(_), Err(_)) => true,
+                _ => false,
+            };
+            if newer {
+                copy(src, &dst).unwrap();
+            }
 
-        let appdata = var("APPDATA").unwrap();
+            let appdata = var("APPDATA").unwrap();
 
-        let paths = read_dir("../patchs").unwrap();
+            let paths = read_dir("../patchs").unwrap();
 
-        copy_patches(
-            paths,
-            "\\Balatro\\Mods\\balatro-vs\\lovely".to_string(),
-            appdata,
-        );
+            copy_patches(
+                paths,
+                "\\Balatro\\Mods\\balatro-vs\\lovely".to_string(),
+                appdata,
+            );
+        }
     }
 }
 

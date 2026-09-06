@@ -1,0 +1,90 @@
+name: Release Switch
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the Switch build to"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  TITLE_ID: 0100CD801CE5E000
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Set version
+        run: echo "VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VERSION }}
+
+      - name: Install cargo-skyline
+        run: cargo install cargo-skyline
+
+      - name: Install skyline toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NIGHTLY="nightly-$(gh api 'repos/skyline-rs/rust-src/commits?sha=skyline&author=bors&per_page=1' --jq '.[0].commit.author.date[:10]')"
+          rustup toolchain install "$NIGHTLY" --profile minimal --no-self-update
+          TOOLCHAIN="$HOME/.skyline-toolchain"
+          cp -a "$(rustup run "$NIGHTLY" rustc --print sysroot)" "$TOOLCHAIN"
+          SRC="$TOOLCHAIN/lib/rustlib/src/rust"
+          rm -rf "$SRC"
+          git clone -q --depth 1 --filter=blob:none --sparse --branch skyline https://github.com/skyline-rs/rust-src "$SRC"
+          git -C "$SRC" sparse-checkout set library
+          git -C "$SRC" submodule update -q --init --depth 1 library/backtrace
+          rustup toolchain link skyline-v3 "$TOOLCHAIN"
+          echo "std source $(git -C "$SRC" rev-parse --short HEAD) on $NIGHTLY"
+
+      - name: Update integrity
+        run: |
+          echo '#[cfg(feature = "with_integrity")]
+              pub fn get_integrity_hash() -> String {
+                  "${{ secrets.INTEGRITY_HASH }}".to_string()
+              }
+          ' > core/src/modules/integrity.rs
+
+      - name: Build plugin
+        working-directory: nx
+        run: cargo skyline build --release --features with_integrity
+
+      - name: Package
+        run: |
+          set -e
+          PKG="balatro-vs-${VERSION}-switch"
+          PLUGINS="$PKG/atmosphere/contents/${TITLE_ID}/romfs/skyline/plugins"
+          MOD="$PKG/Balatro/Mods/balatro-vs/lovely"
+          mkdir -p "$PLUGINS" "$MOD"
+          cp nx/target/aarch64-skyline-switch/release/libbalatro_vs_nx.nro "$PLUGINS/"
+          find patchs -maxdepth 1 -type f ! -name '*.so' ! -name '*.dll' -exec cp {} "$MOD/" \;
+          sed -i 's|"protocol": "ws"|"protocol": "wss"|g' "$MOD/bvs.json"
+          sed -i 's|"host": "localhost"|"host": "live.balatro-vs-matchmaking.eu"|g' "$MOD/bvs.json"
+          sed -i 's|"port": 3536|"port": 0|g' "$MOD/bvs.json"
+          (cd "$PKG" && zip -r "../$PKG.zip" .)
+          echo "ZIP=$PKG.zip" >> "$GITHUB_ENV"
+          find "$PKG" -type f | sort
+
+      - name: Upload Release
+        uses: ncipollo/release-action@v1.12.0
+        with:
+          artifacts: ${{ env.ZIP }}
+          tag: ${{ env.VERSION }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
+          omitBodyDuringUpdate: true
+          omitNameDuringUpdate: true

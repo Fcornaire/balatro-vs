@@ -1,19 +1,19 @@
+use crate::transport::{PeerId, PeerState, TransportKind};
 use bincode::{deserialize, serialize};
-use futures::{select, FutureExt};
-use futures_timer::Delay;
-use matchbox_socket::{PeerId, PeerState, WebRtcSocketBuilder};
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use time::OffsetDateTime;
 use tracing::{debug, error, info, warn};
 
-use crate::{get_bvs_config, init_or_reset_ws_routine_handle};
+use crate::get_bvs_config;
 use crate::{
-    get_runtime, get_ws, modules::game_manipulation::GameManipulationEvent, reset_ws, set_ws,
+    get_transport, modules::game_manipulation::GameManipulationEvent, reset_transport,
+    set_transport,
 };
 
+#[cfg(feature = "with_integrity")]
 use super::integrity::get_integrity_hash;
 use super::{card_conf::AreaType, game_manipulation::GameManipulation, CardConf};
 
@@ -122,9 +122,9 @@ impl Network {
     fn send_event_to_opponent(&self, event: NetworkEvent) -> Result<(), String> {
         if let Some(peer) = &self.opponent {
             let packet = serialize(&event).unwrap().into_boxed_slice();
-            let mut socket = get_ws().unwrap().lock().unwrap();
+            let mut socket = get_transport().unwrap().lock().unwrap();
             let socket = socket.as_mut().unwrap();
-            socket.channel_mut(0).send(packet, *peer);
+            socket.send(packet, *peer);
             return Ok(());
         }
 
@@ -132,67 +132,44 @@ impl Network {
     }
 
     fn connect(&self, room_code: String) {
-        let server = get_bvs_config().get_server();
+        let config = get_bvs_config();
+        let server = config.get_server();
         let protocol = server.get_protocol();
         let port = if server.get_port() == 0 {
             "".to_string()
         } else {
             format!(":{}", server.get_port())
         };
-
-        let mut builder = WebRtcSocketBuilder::new(&format!(
+        let url = format!(
             "{}://{}{}{}{room_code}?next=2",
             protocol,
             server.get_host(),
             port,
             server.get_path()
-        ));
+        );
 
-        if cfg!(feature = "with_integrity") {
-            builder = builder.integrity_hash(get_integrity_hash());
+        #[cfg(feature = "with_integrity")]
+        let integrity_hash = Some(get_integrity_hash());
+        #[cfg(not(feature = "with_integrity"))]
+        let integrity_hash: Option<String> = None;
+
+        let kind = TransportKind::for_target();
+        info!("[Network] Connecting to {url} ({kind:?})");
+        match crate::transport::connect(kind, &url, integrity_hash) {
+            Ok(transport) => set_transport(transport),
+            Err(e) => error!("[Network] Failed to connect: {e}"),
         }
+    }
 
-        let (socket, loop_fut) = builder
-            .signaling_keep_alive_interval(Some(Duration::from_secs(15)))
-            .add_reliable_channel()
-            .build();
-
-        let handle = std::thread::Builder::new()
-            .name("matchbox-loop-future_thread".to_string())
-            .spawn(move || {
-                get_runtime().block_on(async {
-                    let loop_fut = loop_fut.fuse();
-                    futures::pin_mut!(loop_fut);
-
-                    let timeout = Delay::new(Duration::from_millis(100));
-                    futures::pin_mut!(timeout);
-
-                    loop {
-                        select! {
-                            _ = (&mut timeout).fuse() => {
-                                timeout.reset(Duration::from_millis(100));
-                            }
-
-                            _ = &mut loop_fut => {
-                                info!("[Network] WebRTC socket closed");
-                            }
-                        }
-                    }
-                });
-            });
-
-        if let Ok(handle) = handle {
-            init_or_reset_ws_routine_handle(handle);
-        } else {
-            panic!("[Network] Failed to start WebRTC socket");
-        }
-
-        set_ws(socket);
+    fn reset_pairing(&mut self) {
+        self.state = NetworkState::Idle;
+        self.opponent = None;
     }
 
     pub fn start_matchmaking(&mut self, game_manipulation: &mut GameManipulation) -> bool {
-        let socket = get_ws();
+        let socket = get_transport();
         if socket.is_none() || socket.as_ref().unwrap().lock().unwrap().is_none() {
+            self.reset_pairing();
             let room_code = "random".to_string();
             self.connect(room_code);
         }
@@ -212,8 +189,9 @@ impl Network {
     }
 
     pub fn start_versus_friendlies(&mut self) -> String {
-        let socket = get_ws();
+        let socket = get_transport();
         if socket.is_none() || socket.as_ref().unwrap().lock().unwrap().is_none() {
+            self.reset_pairing();
             let room_code = Alphanumeric.sample_string(&mut rand::thread_rng(), 8);
             self.connect(room_code.clone());
             self.friendly_room_code = room_code.clone();
@@ -232,8 +210,9 @@ impl Network {
     }
 
     pub fn start_versus_friendlies_pairing(&mut self, room_code: String) -> bool {
-        let socket = get_ws();
+        let socket = get_transport();
         if socket.is_none() || socket.as_ref().unwrap().lock().unwrap().is_none() {
+            self.reset_pairing();
             self.state = NetworkState::Search;
 
             info!("Starting friendly match with room code: {}", room_code);
@@ -249,7 +228,7 @@ impl Network {
     pub fn quit_server(&mut self) -> bool {
         debug!("[Network] Quit_matchmaking");
 
-        let socket = get_ws();
+        let socket = get_transport();
 
         if socket.is_none() || socket.as_ref().unwrap().lock().unwrap().is_none() {
             warn!("[Network] No socket to close");
@@ -263,7 +242,7 @@ impl Network {
         self.friendly_room_code.clear();
         socket.close();
         drop(socket_guard);
-        reset_ws();
+        reset_transport();
 
         self.state = NetworkState::Idle;
 
@@ -276,9 +255,9 @@ impl Network {
             let event = NetworkEvent::ConfirmMatch;
             let packet = serialize(&event).unwrap().into_boxed_slice();
 
-            let mut socket = get_ws().unwrap().lock().unwrap();
+            let mut socket = get_transport().unwrap().lock().unwrap();
             let socket = socket.as_mut().unwrap();
-            socket.channel_mut(0).send(packet, *peer);
+            socket.send(packet, *peer);
 
             match self.state {
                 NetworkState::Found => {
@@ -301,7 +280,7 @@ impl Network {
     }
 
     pub fn poll_and_update(&mut self, game_manipulation: &mut GameManipulation) {
-        let socket = get_ws();
+        let socket = get_transport();
         if socket.is_none() || socket.as_ref().unwrap().lock().unwrap().is_none() {
             // No socket yet
             return;
@@ -329,7 +308,7 @@ impl Network {
                         );
                         let packet = serialize(&event).unwrap().into_boxed_slice();
 
-                        socket.channel_mut(0).send(packet, peer);
+                        socket.send(packet, peer);
                     }
                     PeerState::Disconnected => {
                         info!("Peer left: {peer}");
@@ -367,10 +346,10 @@ impl Network {
                 }
             }
 
-            if !socket.channel_mut(0).is_closed() {
-                if socket.connected_peers().count() > 0 {
+            if !socket.is_closed() {
+                if socket.connected_peers_count() > 0 {
                     // Accept any messages incoming
-                    let received = socket.channel_mut(0).receive(); // Updated to use channel_mut(0)
+                    let received = socket.receive();
 
                     drop(socket_guard);
 
@@ -389,7 +368,7 @@ impl Network {
                 }
             } else {
                 drop(socket_guard);
-                reset_ws();
+                reset_transport();
             }
         }
 
@@ -693,9 +672,9 @@ impl Network {
             let event = NetworkEvent::Rematch(game_manipulation.get_seed());
             let packet = serialize(&event).unwrap().into_boxed_slice();
 
-            let mut socket = get_ws().unwrap().lock().unwrap();
+            let mut socket = get_transport().unwrap().lock().unwrap();
             let socket = socket.as_mut().unwrap();
-            socket.channel_mut(0).send(packet, *peer);
+            socket.send(packet, *peer);
 
             return true;
         }
@@ -731,18 +710,17 @@ impl Network {
                 );
                 game_manipulation.register_event(GameManipulationEvent::OnRTTUpdated(self.rtt));
             }
-            NetworkEvent::NewPeer(peer, connected_date, seed) => match self.state {
+            NetworkEvent::NewPeer(peer, _connected_date, seed) => match self.state {
                 NetworkState::Search => {
                     info!("[Network] Opponent {peer} want to play,waiting for response...");
                     self.state = NetworkState::Found;
                     self.opponent = Some(peer_id.clone());
 
-                    let opponent_connected_date = OffsetDateTime::parse(
-                        connected_date.as_str(),
-                        &time::format_description::well_known::Rfc3339,
-                    )
-                    .unwrap();
-                    if opponent_connected_date < self.connected_date.unwrap() {
+                    let my_id = get_transport()
+                        .and_then(|s| s.lock().unwrap().as_mut().and_then(|s| s.id()));
+                    let adopt = my_id.map_or(true, |me| peer_id.to_string() < me.to_string());
+                    if adopt {
+                        info!("[Network] Using the opponent's seed {seed}");
                         game_manipulation.set_seed(seed);
                     }
 

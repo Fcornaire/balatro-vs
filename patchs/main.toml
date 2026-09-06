@@ -58,10 +58,19 @@ function get_bvs_json(...)
     local path = "Mods/balatro-vs/lovely/bvs.json"
     if love.filesystem.getInfo(path) then
         return love.filesystem.read(path)
-    else
-        return nil
     end
+
+    if NFS and SMODS and SMODS.MODS_DIR then
+        local sd_path = SMODS.MODS_DIR .. "/balatro-vs/lovely/bvs.json"
+        if NFS.getInfo(sd_path) then
+            return NFS.read(sd_path)
+        end
+    end
+    return nil
 end
+
+if bvs_bridge_load then bvs_bridge_load() end
+
 local lurker = nil 
 lume = require('rxi-lume')
 
@@ -88,6 +97,7 @@ if is_android then
 	local loader, err = package.loadlib("Mods/balatro-vs/lovely/libwinmm.so", "luaopen_winmm")
 	if not loader then error("Failed to load winmm: " .. tostring(err)) end
 	loader()
+	bvs_bridge_load()
 	print("Loaded bvs native lib winmm on Android")
 end
 
