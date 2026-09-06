@@ -1,12 +1,13 @@
-use card_conf::{AreaType, CardConf};
+pub use card_conf::{AreaType, CardConf};
 use game_manipulation::{GameManipulation, GameManipulationEvent};
-use mlua::{Result, Table};
 use network::Network;
 use semver::Version;
 use tracing::{error, info};
 use updater::Updater;
 
-use crate::{get_modules, get_runtime};
+use crate::get_modules;
+#[cfg(not(target_os = "switch"))]
+use crate::get_runtime;
 
 pub mod bvs;
 pub mod card_conf;
@@ -14,6 +15,31 @@ pub mod game_manipulation;
 pub mod integrity;
 pub mod network;
 pub mod updater;
+
+pub type Result<T> = std::result::Result<T, String>;
+
+fn auto_update_disabled() -> bool {
+    static DISABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *DISABLED.get_or_init(no_update_marker_exists)
+}
+
+#[cfg(target_os = "switch")]
+fn no_update_marker_exists() -> bool {
+    std::path::Path::new(updater::nx::NO_UPDATE_MARKER).exists()
+}
+
+#[cfg(not(target_os = "switch"))]
+fn no_update_marker_exists() -> bool {
+    let Some(base) = std::env::var_os("APPDATA") else {
+        return false;
+    };
+    std::path::PathBuf::from(base)
+        .join("Balatro")
+        .join("Mods")
+        .join("balatro-vs")
+        .join("no_update")
+        .exists()
+}
 
 pub struct Modules {
     network: Network,
@@ -24,8 +50,11 @@ pub struct Modules {
 impl Modules {
     pub fn init() -> Self {
         info!("[Modules] Initializing modules...");
-        let mut updater = Updater::new();
-        updater.update_current_version();
+        let updater = {
+            let mut updater = Updater::new();
+            updater.update_current_version();
+            updater
+        };
 
         Self {
             network: Network::new(),
@@ -40,8 +69,13 @@ impl Modules {
     }
 
     pub fn updater_get_and_update_last_version(&mut self) -> Result<()> {
+        if auto_update_disabled() {
+            info!("[BVS] auto-update disabled, skipping the version check");
+            return Ok(());
+        }
         let url = self.updater.get_repository_url().to_string();
 
+        #[cfg(not(target_os = "switch"))]
         get_runtime().spawn(async move {
             match Updater::get_last_stable_version(&url).await {
                 Ok(res) => {
@@ -52,6 +86,18 @@ impl Modules {
             }
         });
 
+        #[cfg(target_os = "switch")]
+        updater::nx::spawn(
+            move || match Updater::get_last_stable_version_blocking(&url) {
+                Ok(res) => {
+                    info!("[Modules] Latest version on GitHub: {res}");
+                    let updater = &mut get_modules().lock().unwrap().updater;
+                    updater.set_last_version(res);
+                }
+                Err(e) => error!("[Modules] Failed to fetch the latest version: {e}"),
+            },
+        );
+
         Ok(())
     }
 
@@ -60,6 +106,9 @@ impl Modules {
     }
 
     pub fn updater_check_for_update(&mut self) -> Result<bool> {
+        if auto_update_disabled() {
+            return Ok(true);
+        }
         if self.updater.is_updating() {
             return Ok(false);
         }
@@ -106,11 +155,26 @@ impl Modules {
                 let last_version_clone = last_version.clone();
                 self.updater.set_is_updating(true);
 
+                #[cfg(not(target_os = "switch"))]
                 get_runtime().spawn(async move {
                     let is_success = Updater::trigger_update(&url, &last_version_clone).await;
                     if is_success {
                         let updater = &mut get_modules().lock().unwrap().updater;
                         updater.set_should_update(true);
+                    }
+                });
+
+                // Switch can install right away
+                #[cfg(target_os = "switch")]
+                updater::nx::spawn(move || {
+                    if Updater::trigger_update_blocking(&url, &last_version_clone)
+                        && Updater::apply_switch_update()
+                    {
+                        get_modules()
+                            .lock()
+                            .unwrap()
+                            .updater
+                            .set_should_update(true);
                     }
                 });
 
@@ -151,9 +215,7 @@ impl Modules {
 
         if res.is_empty() {
             error!("[Modules] Failed to start versus friendlies");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to start versus friendlies".to_string(),
-            ));
+            return Err("Failed to start versus friendlies".to_string());
         }
 
         Ok(res)
@@ -176,29 +238,20 @@ impl Modules {
 
         if !res {
             error!("[Modules] Failed to confirm versus matchmaking");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to confirm versus matchmaking".to_string(),
-            ));
+            return Err("Failed to confirm versus matchmaking".to_string());
         }
 
         Ok(res)
     }
 
-    pub fn network_send_highlighted_card(&mut self, highlighted_cards: Table) -> Result<bool> {
-        let cards: Vec<usize> = highlighted_cards
-            .pairs::<usize, usize>()
-            .map(|pair| pair.unwrap())
-            .map(|(_, card)| card)
-            .collect();
+    pub fn network_send_highlighted_card(&mut self, highlighted_cards: Vec<usize>) -> Result<bool> {
         let res = self
             .network
-            .send_highlighted_card(&mut self.game_manipulation, cards);
+            .send_highlighted_card(&mut self.game_manipulation, highlighted_cards);
 
         if !res {
             error!("[Modules] Failed to send highlighted card");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to send highlighted card".to_string(),
-            ));
+            return Err("Failed to send highlighted card".to_string());
         }
 
         Ok(res)
@@ -211,14 +264,9 @@ impl Modules {
 
     pub fn network_send_to_opponent_new_cards_alignement(
         &mut self,
-        alignement: Table,
+        alignement: Vec<usize>,
         _type: String,
     ) -> Result<()> {
-        let alignement: Vec<usize> = alignement
-            .pairs::<usize, usize>()
-            .map(|pair| pair.unwrap())
-            .map(|(_, card_index)| card_index)
-            .collect();
         self.network
             .send_to_opponent_new_cards_alignement(alignement, _type);
         Ok(())
@@ -234,13 +282,7 @@ impl Modules {
         Ok(())
     }
 
-    pub fn network_player_discarded_cards(&mut self, discarded_cards: Table) -> Result<()> {
-        let discarded_cards: Vec<usize> = discarded_cards
-            .pairs::<usize, usize>()
-            .map(|pair| pair.unwrap())
-            .map(|(_, card_index)| card_index)
-            .collect();
-
+    pub fn network_player_discarded_cards(&mut self, discarded_cards: Vec<usize>) -> Result<()> {
         self.network
             .player_discarded_cards(discarded_cards, &mut self.game_manipulation);
         Ok(())
@@ -250,9 +292,7 @@ impl Modules {
         Ok(self.network.has_opponent_highlithed_cards())
     }
 
-    pub fn network_send_new_card(&mut self, table: Table) -> Result<()> {
-        let conf = CardConf::from(table);
-
+    pub fn network_send_new_card(&mut self, conf: CardConf) -> Result<()> {
         self.network.send_new_card(conf);
         Ok(())
     }
@@ -291,25 +331,13 @@ impl Modules {
         &mut self,
         index: usize,
         area_type: String,
-        cards_index: Table,
-        targets: Table,
+        cards_index: Vec<usize>,
+        targets: Vec<CardConf>,
     ) -> Result<()> {
-        let cards_index: Vec<usize> = cards_index
-            .pairs::<usize, usize>()
-            .map(|pair| pair.unwrap())
-            .map(|(_, card_index)| card_index)
-            .collect();
-
-        let targets: Vec<CardConf> = targets
-            .pairs::<usize, Table>()
-            .map(|pair| pair.unwrap())
-            .map(|(_, target_table)| CardConf::from(target_table))
-            .collect();
-
         let area = match area_type.as_str() {
             "consumeables" => AreaType::Consumeables,
             "pack_cards" => AreaType::PackCards,
-            _ => panic!("Unknown area type: {}", area_type),
+            _ => return Err(format!("Unknown area type: {}", area_type)),
         };
 
         let res = self
@@ -318,23 +346,18 @@ impl Modules {
 
         if !res {
             error!("[Modules] Failed to use consumeable card");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to use consumeable card".to_string(),
-            ));
+            return Err("Failed to use consumeable card".to_string());
         }
 
         Ok(())
     }
 
-    pub fn network_player_use_voucher_card(&mut self, card: Table) -> Result<()> {
-        let card = CardConf::from(card);
+    pub fn network_player_use_voucher_card(&mut self, card: CardConf) -> Result<()> {
         let res = self.network.player_use_voucher_card(card);
 
         if !res {
             error!("[Modules] Failed to use voucher card");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to use voucher card".to_string(),
-            ));
+            return Err("Failed to use voucher card".to_string());
         }
 
         Ok(())
@@ -342,23 +365,14 @@ impl Modules {
 
     pub fn network_send_open_booster(
         &mut self,
-        card: Table,
-        shop_jokers_cards_conf: Table,
+        card: CardConf,
+        shop_jokers_cards_conf: Vec<CardConf>,
     ) -> Result<()> {
-        let card = CardConf::from(card);
-        let shop_jokers_cards_conf: Vec<CardConf> = shop_jokers_cards_conf
-            .pairs::<usize, Table>()
-            .map(|pair| pair.unwrap())
-            .map(|(_, card_table)| CardConf::from(card_table))
-            .collect();
-
         let res = self.network.send_open_booster(card, shop_jokers_cards_conf);
 
         if !res {
             error!("[Modules] Failed to send open booster");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to send open booster".to_string(),
-            ));
+            return Err("Failed to send open booster".to_string());
         }
 
         Ok(())
@@ -369,9 +383,7 @@ impl Modules {
 
         if !res {
             error!("[Modules] Failed to skip booster");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to skip booster".to_string(),
-            ));
+            return Err("Failed to skip booster".to_string());
         }
 
         Ok(())
@@ -380,18 +392,15 @@ impl Modules {
     pub fn network_send_new_card_from_booster(
         &mut self,
         card_index: usize,
-        selected_card: Option<Table>,
+        selected_card: Option<CardConf>,
     ) -> Result<()> {
-        let selected_card = selected_card.map(CardConf::from);
         let res = self
             .network
             .send_new_card_from_booster(card_index, selected_card);
 
         if !res {
             error!("[Modules] Failed to send new card from booster");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to send new card from booster".to_string(),
-            ));
+            return Err("Failed to send new card from booster".to_string());
         }
 
         Ok(())
@@ -402,23 +411,18 @@ impl Modules {
 
         if !res {
             error!("[Modules] Failed to send reroll shop");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to send reroll shop".to_string(),
-            ));
+            return Err("Failed to send reroll shop".to_string());
         }
 
         Ok(())
     }
 
-    pub fn network_send_bought_card(&mut self, card: Table, id: String) -> Result<()> {
-        let card = CardConf::from(card);
+    pub fn network_send_bought_card(&mut self, card: CardConf, id: String) -> Result<()> {
         let res = self.network.send_bought_card(card, id);
 
         if !res {
             error!("[Modules] Failed to send bought card");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to send bought card".to_string(),
-            ));
+            return Err("Failed to send bought card".to_string());
         }
 
         Ok(())
@@ -429,9 +433,7 @@ impl Modules {
 
         if !res {
             error!("[Modules] Failed to send sell card");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to send sell card".to_string(),
-            ));
+            return Err("Failed to send sell card".to_string());
         }
 
         Ok(())
@@ -442,9 +444,7 @@ impl Modules {
 
         if !res {
             error!("[Modules] Failed to send cash out");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to send cash out".to_string(),
-            ));
+            return Err("Failed to send cash out".to_string());
         }
 
         if !is_ending_shop {
@@ -460,9 +460,7 @@ impl Modules {
 
         if !res {
             error!("[Modules] Failed to send rematch request");
-            return Err(mlua::Error::RuntimeError(
-                "Failed to send rematch request".to_string(),
-            ));
+            return Err("Failed to send rematch request".to_string());
         }
 
         Ok(())

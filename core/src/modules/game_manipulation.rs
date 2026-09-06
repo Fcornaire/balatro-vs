@@ -4,12 +4,8 @@ use itertools::Itertools;
 use rand::distributions::{Alphanumeric, DistString};
 use tracing::{debug, error, warn};
 
-use crate::{
-    get_lua_state_ptrs,
-    lua_patcher::LuaPatcher,
-    macros::macros::{
-        call_lua_function, execute_lua_function_with_args, execute_lua_function_with_result,
-    },
+use crate::macros::macros::{
+    call_lua_function, execute_lua_function_with_args, execute_lua_function_with_result,
 };
 
 use super::{card_conf::AreaType, network::NetworkState, CardConf};

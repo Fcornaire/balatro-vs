@@ -1,17 +1,51 @@
-use std::{fs, io::Write, path::Path, process::Command};
+use std::{fs, path::Path};
 
-use reqwest::Error;
 use semver::Version;
 use serde::Deserialize;
 use tracing::{error, info};
 use zip::ZipArchive;
 
 use crate::get_bvs_config;
-use tokio::{fs::File, io::AsyncWriteExt};
 
 #[derive(Deserialize, Debug)]
 struct Tag {
     name: String,
+}
+
+#[cfg(target_os = "switch")]
+pub mod nx {
+    use std::sync::OnceLock;
+
+    pub type HttpGet = fn(&str) -> Result<Vec<u8>, String>;
+
+    static HTTP_GET: OnceLock<HttpGet> = OnceLock::new();
+
+    pub const SD_ROOT: &str = "sd:/";
+    pub const ZIP_PATH: &str = "sd:/Balatro/Mods/balatro-vs-switch-update.zip";
+    pub const NO_UPDATE_MARKER: &str = "sd:/Balatro/Mods/balatro-vs/no_update";
+
+    pub fn set_http_get(func: HttpGet) {
+        let _ = HTTP_GET.set(func);
+    }
+
+    pub fn http_get(url: &str) -> Result<Vec<u8>, String> {
+        let get = HTTP_GET.get().ok_or("no HTTP client registered")?;
+        get(url)
+    }
+
+    /// Runs `func` on a worker thread that never exits
+    /// On the Switch a thread with TLS destructors crashes in `nn::ro` on exit
+    pub fn spawn(func: impl FnOnce() + Send + 'static) {
+        let _ = std::thread::Builder::new()
+            .name("bvs-updater".to_string())
+            .spawn(move || {
+                crate::run_thread_start_hook();
+                func();
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(3600));
+                }
+            });
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +114,14 @@ impl Updater {
         cfg!(feature = "thunderstore_build")
     }
 
+    pub fn update_current_version(&mut self) {
+        self.current_version = get_bvs_config().clone().get_version();
+    }
+
+    #[cfg(not(target_os = "switch"))]
     pub async fn trigger_update(base_download_url: &str, last_version: &str) -> bool {
+        use tokio::io::AsyncWriteExt;
+
         info!("[Updater] Triggering update");
 
         let client = reqwest::Client::new();
@@ -123,11 +164,33 @@ impl Updater {
         }
 
         let content = res.bytes().await.unwrap();
-        let mut file = File::create(download_path).await.unwrap();
+        let mut file = tokio::fs::File::create(download_path).await.unwrap();
         file.write_all(&content).await.unwrap();
 
         info!("[Updater] Downloaded latest version ");
         true
+    }
+
+    /// Switch downloads update to the SD card.
+    #[cfg(target_os = "switch")]
+    pub fn trigger_update_blocking(base_download_url: &str, last_version: &str) -> bool {
+        info!("[Updater] Triggering update");
+        let url = format!(
+            "{}/releases/download/{}/balatro-vs-{}-switch.zip",
+            base_download_url, last_version, last_version
+        );
+        match nx::http_get(&url)
+            .and_then(|bytes| fs::write(nx::ZIP_PATH, bytes).map_err(|e| e.to_string()))
+        {
+            Ok(()) => {
+                info!("[Updater] Downloaded latest version to {}", nx::ZIP_PATH);
+                true
+            }
+            Err(e) => {
+                error!("[Updater] Failed to download latest version: {e}");
+                false
+            }
+        }
     }
 
     pub fn update(&self) {
@@ -137,8 +200,16 @@ impl Updater {
             return;
         }
 
+        #[cfg(target_os = "switch")]
+        {
+            Self::apply_switch_update();
+            return;
+        }
+
         #[cfg(target_os = "windows")]
         {
+            use std::io::Write;
+
             //unzip the downloaded zip
             let download_path = dirs::download_dir()
                 .unwrap_or_else(|| dirs::home_dir().unwrap())
@@ -201,7 +272,7 @@ impl Updater {
             let mut file = std::fs::File::create(&script_path).unwrap();
             file.write_all(script_content.as_bytes()).unwrap();
 
-            Command::new("cmd")
+            std::process::Command::new("cmd")
                 .args(&["/C", script_path.to_str().unwrap()])
                 .spawn()
                 .expect("Failed to start batch script");
@@ -236,11 +307,27 @@ impl Updater {
         crate::lua_print("[BVS] Android update applied successfully");
     }
 
-    pub fn update_current_version(&mut self) {
-        self.current_version = get_bvs_config().clone().get_version();
+    #[cfg(target_os = "switch")]
+    pub fn apply_switch_update() -> bool {
+        let zip_path = Path::new(nx::ZIP_PATH);
+        if !zip_path.exists() {
+            return false;
+        }
+        match unzip_file(zip_path, Path::new(nx::SD_ROOT)) {
+            Ok(()) => {
+                let _ = fs::remove_file(zip_path);
+                info!("[Updater] Switch update applied, restart the game");
+                true
+            }
+            Err(e) => {
+                error!("[Updater] Extraction failed: {e:?}");
+                false
+            }
+        }
     }
 
-    pub async fn get_last_stable_version(repository_url: &str) -> Result<String, Error> {
+    #[cfg(not(target_os = "switch"))]
+    pub async fn get_last_stable_version(repository_url: &str) -> Result<String, reqwest::Error> {
         let tags_url = format!("{}/tags", repository_url);
         let client = reqwest::Client::new();
         let res = client
@@ -250,21 +337,28 @@ impl Updater {
             .await?
             .json::<Vec<Tag>>()
             .await?;
-
-        let mut tags = res
-            .iter()
-            .map(|tag| tag.name.clone())
-            .collect::<Vec<String>>();
-        tags.sort_by(|a, b| {
-            Version::parse(b)
-                .unwrap_or_else(|_| Version::new(0, 0, 0))
-                .cmp(&Version::parse(a).unwrap_or_else(|_| Version::new(0, 0, 0)))
-        });
-        let default_version = "0.0.0".to_string();
-        let latest_tag = tags.first().unwrap_or(&default_version);
-
-        Ok(latest_tag.clone())
+        Ok(latest_tag(res))
     }
+
+    #[cfg(target_os = "switch")]
+    pub fn get_last_stable_version_blocking(repository_url: &str) -> Result<String, String> {
+        let body = nx::http_get(&format!("{}/tags", repository_url))?;
+        let tags: Vec<Tag> = serde_json::from_slice(&body).map_err(|e| format!("tags: {e}"))?;
+        Ok(latest_tag(tags))
+    }
+}
+
+fn latest_tag(tags: Vec<Tag>) -> String {
+    let mut names: Vec<String> = tags.into_iter().map(|t| t.name).collect();
+    names.sort_by(|a, b| {
+        Version::parse(b)
+            .unwrap_or_else(|_| Version::new(0, 0, 0))
+            .cmp(&Version::parse(a).unwrap_or_else(|_| Version::new(0, 0, 0)))
+    });
+    names
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "0.0.0".to_string())
 }
 
 fn unzip_file(zip_path: &Path, extract_to: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -328,6 +422,7 @@ fn unzip_file_android(
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
 fn copy_directory(src: &Path, dst: &Path) -> std::io::Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;

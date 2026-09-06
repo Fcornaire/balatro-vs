@@ -94,6 +94,7 @@ function on_update()
     play_sound('whoosh', 1)
 
     local is_thunderstore = updater_is_thunderstore_build and updater_is_thunderstore_build()
+    local is_switch = nxfs ~= nil
     local last_version = updater_get_last_version and updater_get_last_version() or "unknown"
 
     G.FUNCS.overlay_menu {
@@ -151,20 +152,23 @@ function on_update()
                                                         n = G.UIT.R,
                                                         config = { scale = 0.5, shadow = true },
                                                         nodes = {
-                                                            { n = G.UIT.T, config = { text = "A new update is available !", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+                                                            { n = G.UIT.T, config = { text = is_switch and ("Version " .. last_version .. " installed !") or "A new update is available !", scale = 0.85, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
                                                         }
                                                     },
                                                     {
                                                         n = G.UIT.R,
                                                         config = { align = "cm", minw = 1.4, padding = 0.2 },
                                                         nodes = {
+                                                            is_switch and
+                                                            { n = G.UIT.T, config = { text = "Quit and restart the game to use it.", scale = 0.6, colour = G.C.UI.TEXT_LIGHT, shadow = true } } or
+                                                            nil,
                                                         }
                                                     },
                                                     {
                                                         n = G.UIT.R,
                                                         config = { align = "cm", minw = 1.4, padding = 0.2 },
                                                         nodes = {
-                                                            UIBox_button({
+                                                            not is_switch and UIBox_button({
                                                                 label = { localize('ph_click_confirm') },
                                                                 button = 'updater_update_bvs',
                                                                 minw = 2.5,
@@ -172,7 +176,7 @@ function on_update()
                                                                 colour = G.C.PURPLE,
                                                                 scale = 2.5,
                                                                 col = true,
-                                                            })
+                                                            }) or nil
                                                         }
                                                     },
                                                 }
@@ -333,6 +337,7 @@ function on_random_start(seed)
             BALATRO_VS_CTX.network.is_live = true
             backup_progress()
             G.F_NO_SAVING = true
+            G.GAME.viewed_back = Back(G.P_CENTERS.b_red) --TODO: may be one day custom deck ?
             G.FUNCS.start_run(nil, { stake = 1, seed = seed, challenge = nil })
             return true
         end
@@ -973,11 +978,14 @@ function update_message_instant(message, scale)
                 } },
             } },
             config = {
-                align = 'cm',
-                offset = { x = 0, y = -2.1 },
-                major = G.opponent_play,
+                align = 'tli',
+                offset = { x = 0, y = 0.2 },
+                major = G.ROOM_ATTACH or G.opponent_play,
             }
         }
+        local box = G.GAME.boss_warning_text
+        local box_w = (box.T and box.T.w and box.T.w > 0) and box.T.w or 2
+        box.alignment.offset.x = G.TILE_W - box_w - 0.3
         G.GAME.boss_warning_text.attention_text = true
         G.GAME.boss_warning_text.states.collide.can = false
     else
@@ -1274,6 +1282,7 @@ function on_rematch(seed)
     G.TILE_H = ORIG_RENDER_SCALE.TILE_H
     G.TILESCALE = ORIG_RENDER_SCALE.TILESCALE
 
+    G.GAME.viewed_back = Back(G.P_CENTERS.b_red) --TODO: may be one day custom deck ?
     G.FUNCS.start_run(nil, { stake = 1, seed = seed, challenge = nil })
     on_create_timer(45, 'on_wait_for_user_action_over')
 end

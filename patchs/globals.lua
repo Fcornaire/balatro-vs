@@ -112,7 +112,8 @@ G.FUNCS.versus_friendlies_start = function()
         local room = network_start_versus_friendlies()
         if room ~= nil and room ~= '' then
             BALATRO_VS_CTX.network.current_friendly_room_code = room
-            local room_obfuscated = room:gsub('.', '*')
+            local is_switch = nxfs ~= nil
+            local room_obfuscated = is_switch and room or room:gsub('.', '*')
             G.opp_ext_code = ''
             return
             {
@@ -131,7 +132,7 @@ G.FUNCS.versus_friendlies_start = function()
                         config = { align = "cm", minw = 1.4, padding = 0.5 },
                         nodes = {
                             { n = G.UIT.T, config = { text = room_obfuscated, scale = 1.0, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
-                            UIBox_button({
+                            not is_switch and UIBox_button({
                                 text_scale = 1.0,
                                 label = { localize('b_versus_friendlies_copy_code') },
                                 minw = 2,
@@ -140,7 +141,7 @@ G.FUNCS.versus_friendlies_start = function()
                                 colour = G.C.BLUE,
                                 scale = 5,
                                 col = true,
-                            })
+                            }) or nil
                         }
                     },
                     {
@@ -171,7 +172,7 @@ G.FUNCS.versus_friendlies_start = function()
                                 prompt_text =
                                     localize('b_versus_friendlies_enter_code')
                             }),
-                            UIBox_button({
+                            not is_switch and UIBox_button({
                                 text_scale = 1.0,
                                 label = { localize('b_versus_friendlies_paste_code') },
                                 minw = 2,
@@ -180,7 +181,7 @@ G.FUNCS.versus_friendlies_start = function()
                                 colour = G.C.BLUE,
                                 scale = 5,
                                 col = true,
-                            })
+                            }) or nil
                         }
                     },
                     {
@@ -329,6 +330,7 @@ G.FUNCS.opponent_draw_from_his_deck_to_his_hand = function(e)
         trigger = 'after',
         no_delete = true,
         func = function()
+            if not G.opponent_jokers or not G.opponent_hand then return true end
             if G.STATE ~= G.STATES.SHOP and G.STATE ~= G.STATES.NEW_ROUND then --Timer event on regular play (so no shop and no new round)
                 if BALATRO_VS_CTX.timer and not BALATRO_VS_CTX.timer:is_active() then
                     on_start_timer()                                           --Start timer

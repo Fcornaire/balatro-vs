@@ -1,4 +1,3 @@
-use mlua::{IntoLua, Lua, Result, Table};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
@@ -16,6 +15,29 @@ pub enum CardType {
     Consumeable,
     Booster,
     Voucher,
+}
+
+impl CardType {
+    pub fn lua_name(&self) -> &'static str {
+        match self {
+            CardType::Joker => "joker",
+            CardType::Card => "card",
+            CardType::Consumeable => "consumeable",
+            CardType::Voucher => "voucher",
+            CardType::Booster => "booster",
+        }
+    }
+
+    pub fn from_lua_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "joker" => CardType::Joker,
+            "card" => CardType::Card,
+            "consumeable" => CardType::Consumeable,
+            "voucher" => CardType::Voucher,
+            "booster" => CardType::Booster,
+            _ => return None,
+        })
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
@@ -38,142 +60,66 @@ impl CardConf {
     }
 }
 
-impl From<Table> for CardConf {
-    fn from(table: Table) -> Self {
-        let label = table.get::<String>("label".to_string()).unwrap();
-        let type_ = table.get::<String>("type_".to_string()).unwrap();
-        let center = table.get::<String>("center".to_string()).unwrap();
-        let card = table.get::<String>("card".to_string()).unwrap();
-        let center_key = table
-            .get::<String>("center_key".to_string())
-            .unwrap_or_default();
-        let versus_center_id = table
-            .get::<u32>("versus_center_id".to_string())
-            .unwrap_or_default();
-        let ability = table
-            .get::<String>("ability".to_string())
-            .unwrap_or_default();
-        let edition = table
-            .get::<String>("edition".to_string())
-            .unwrap_or_default();
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct LuaCardConf {
+    pub label: String,
+    pub type_: String,
+    pub center: String,
+    pub card: String,
+    pub center_key: String,
+    pub versus_center_id: u32,
+    pub ability: String,
+    pub edition: String,
+    pub location: String,
+    pub stay_flipped: bool,
+}
 
-        match type_.as_str() {
-            "joker" => {
-                let location = table
-                    .get::<String>("location".to_string())
-                    .unwrap_or_default();
-                let stay_flipped = table
-                    .get::<mlua::Value>("stay_flipped".to_string())
-                    .unwrap_or(mlua::Value::Boolean(false))
-                    .as_boolean()
-                    .unwrap_or(false);
-                return CardConf {
-                    type_: CardType::Joker,
-                    label,
-                    location,
-                    stay_flipped,
-                    edition,
-                    center,
-                    card,
-                    center_key,
-                    ability,
-                    versus_center_id,
-                };
-            }
-            "card" => {
-                return CardConf {
-                    type_: CardType::Card,
-                    label,
-                    location: "".to_string(),
-                    stay_flipped: false,
-                    edition,
-                    center,
-                    card,
-                    center_key,
-                    ability,
-                    versus_center_id,
-                };
-            }
-            "consumeable" => {
-                return CardConf {
-                    type_: CardType::Consumeable,
-                    label,
-                    location: "".to_string(),
-                    stay_flipped: false,
-                    edition: "".to_string(),
-                    center,
-                    card,
-                    center_key,
-                    ability,
-                    versus_center_id,
-                };
-            }
-            "voucher" => {
-                return CardConf {
-                    type_: CardType::Voucher,
-                    label,
-                    location: "".to_string(),
-                    stay_flipped: false,
-                    edition: "".to_string(),
-                    center,
-                    card,
-                    center_key,
-                    ability,
-                    versus_center_id,
-                };
-            }
-            "booster" => {
-                return CardConf {
-                    type_: CardType::Booster,
-                    label,
-                    location: "".to_string(),
-                    stay_flipped: false,
-                    edition: "".to_string(),
-                    center,
-                    card,
-                    center_key,
-                    ability,
-                    versus_center_id,
-                };
-            }
-            _ => {
-                panic!("Unknown card type: {}", type_);
-            }
+impl TryFrom<LuaCardConf> for CardConf {
+    type Error = String;
+
+    fn try_from(t: LuaCardConf) -> Result<Self, String> {
+        let type_ = CardType::from_lua_name(&t.type_)
+            .ok_or_else(|| format!("Unknown card type: '{}'", t.type_))?;
+
+        let (location, stay_flipped) = match type_ {
+            CardType::Joker => (t.location, t.stay_flipped),
+            _ => (String::new(), false),
+        };
+
+        let edition = match type_ {
+            CardType::Joker | CardType::Card => t.edition,
+            _ => String::new(),
+        };
+
+        Ok(CardConf {
+            type_,
+            label: t.label,
+            location,
+            stay_flipped,
+            edition,
+            center: t.center,
+            card: t.card,
+            center_key: t.center_key,
+            ability: t.ability,
+            versus_center_id: t.versus_center_id,
+        })
+    }
+}
+
+impl From<&CardConf> for LuaCardConf {
+    fn from(c: &CardConf) -> Self {
+        LuaCardConf {
+            label: c.label.clone(),
+            type_: c.type_.lua_name().to_string(),
+            center: c.center.clone(),
+            card: c.card.clone(),
+            center_key: c.center_key.clone(),
+            versus_center_id: c.versus_center_id,
+            ability: c.ability.clone(),
+            edition: c.edition.clone(),
+            location: c.location.clone(),
+            stay_flipped: c.stay_flipped,
         }
-    }
-}
-
-impl CardConf {
-    pub fn to_table(&self, lua: &Lua) -> Result<Table> {
-        let table = lua.create_table()?;
-
-        table.set("label", self.label.clone())?;
-        table.set("location", self.location.clone())?;
-        table.set("stay_flipped", self.stay_flipped)?;
-        table.set("edition", self.edition.clone())?;
-        table.set("center", self.center.clone())?;
-        table.set("card", self.card.clone())?;
-        table.set("center_key", self.center_key.clone())?;
-        table.set("ability", self.ability.clone())?;
-        table.set("versus_center_id", self.versus_center_id)?;
-
-        table.set(
-            "type_",
-            match self.type_ {
-                CardType::Joker => "joker",
-                CardType::Card => "card",
-                CardType::Consumeable => "consumeable",
-                CardType::Voucher => "voucher",
-                CardType::Booster => "booster",
-            },
-        )?;
-
-        Ok(table)
-    }
-}
-
-impl IntoLua for CardConf {
-    fn into_lua(self, lua: &Lua) -> Result<mlua::Value> {
-        self.to_table(lua)?.into_lua(lua)
     }
 }
