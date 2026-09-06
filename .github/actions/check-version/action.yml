@@ -1,0 +1,20 @@
+name: Check version
+description: Fails when the version in patchs/bvs.json does not match the release tag
+
+inputs:
+  version:
+    description: Release version (the git tag)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        expected="${{ inputs.version }}"
+        actual=$(jq -r .version patchs/bvs.json)
+        if [ "$actual" != "$expected" ]; then
+          echo "::error file=patchs/bvs.json::bvs.json version is $actual but release tag is $expected"
+          exit 1
+        fi
+        echo "bvs.json version $actual matches tag"

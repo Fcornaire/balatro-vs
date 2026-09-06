@@ -31,6 +31,11 @@ jobs:
         with:
           ref: ${{ env.VERSION }}
 
+      - name: Check version
+        uses: ./.github/actions/check-version
+        with:
+          version: ${{ env.VERSION }}
+
       - name: Install cargo-skyline
         run: cargo install cargo-skyline
 
