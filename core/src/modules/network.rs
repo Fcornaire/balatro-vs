@@ -2,6 +2,7 @@ use crate::transport::{PeerId, PeerState, TransportKind};
 use bincode::{deserialize, serialize};
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fmt;
 use std::time::Instant;
 use time::OffsetDateTime;
@@ -94,6 +95,8 @@ pub struct Network {
     friendly_room_code: String,
     ping_measurement: Instant,
     is_waiting_for_pong: bool,
+    /// Messages received too early for the current state and replayed on the next
+    deferred: VecDeque<NetworkEvent>,
 }
 
 impl Network {
@@ -106,6 +109,7 @@ impl Network {
             friendly_room_code: String::new(),
             ping_measurement: Instant::now(),
             is_waiting_for_pong: false,
+            deferred: VecDeque::new(),
         }
     }
 
@@ -164,6 +168,7 @@ impl Network {
     fn reset_pairing(&mut self) {
         self.state = NetworkState::Idle;
         self.opponent = None;
+        self.deferred.clear();
     }
 
     pub fn start_matchmaking(&mut self, game_manipulation: &mut GameManipulation) -> bool {
@@ -239,6 +244,7 @@ impl Network {
         let socket = socket_guard.as_mut().unwrap();
 
         self.opponent = None;
+        self.deferred.clear();
         self.friendly_room_code.clear();
         socket.close();
         drop(socket_guard);
@@ -321,6 +327,7 @@ impl Network {
                         }
 
                         self.opponent = None;
+                        self.deferred.clear();
                         socket.close();
 
                         game_manipulation.regenerate_seed();
@@ -379,9 +386,37 @@ impl Network {
         game_manipulation.handle_timer_with_state_update(self.state.clone());
     }
 
-    pub fn wait_for_next_action(&mut self) {
+    pub fn wait_for_next_action(&mut self, game_manipulation: &mut GameManipulation) {
         debug!("[Network] Wait_for_next_action");
+        self.set_wait_for_user_action(game_manipulation);
+    }
+
+    fn set_wait_for_user_action(&mut self, game_manipulation: &mut GameManipulation) {
         self.state = NetworkState::WaitForUserAction;
+        if self.deferred.is_empty() {
+            return;
+        }
+
+        game_manipulation.handle_timer_with_state_update(self.state.clone());
+
+        let Some(peer) = self.opponent else {
+            self.deferred.clear();
+            return;
+        };
+
+        let deferred: Vec<NetworkEvent> = self.deferred.drain(..).collect();
+        for event in deferred {
+            info!("[Network] Replaying deferred {event}");
+            self.handle_event(game_manipulation, &peer, event);
+        }
+    }
+
+    fn defer(&mut self, event: NetworkEvent) {
+        debug!(
+            "[Network] {event} received in state {:?}, deferred",
+            self.state
+        );
+        self.deferred.push_back(event);
     }
 
     pub fn send_to_opponent_new_cards_alignement(
@@ -519,7 +554,7 @@ impl Network {
                 }
 
                 game_manipulation.register_event(game_event.clone());
-                self.state = NetworkState::WaitForUserAction;
+                self.set_wait_for_user_action(game_manipulation);
             }
             _ => {
                 warn!(
@@ -659,6 +694,7 @@ impl Network {
             match self.state {
                 NetworkState::OpponentRematched => {
                     game_manipulation.register_event(GameManipulationEvent::OnRematch);
+                    self.deferred.clear();
                     self.state = NetworkState::WaitForUserAction;
                 }
                 _ => {
@@ -694,6 +730,15 @@ impl Network {
             info!("Message from {peer_id}: {event}");
         }
 
+        self.handle_event(game_manipulation, peer_id, event);
+    }
+
+    fn handle_event(
+        &mut self,
+        game_manipulation: &mut GameManipulation,
+        peer_id: &PeerId,
+        event: NetworkEvent,
+    ) {
         match event {
             NetworkEvent::Ping() => {
                 if let Err(e) = self.send_event_to_opponent(NetworkEvent::Pong()) {
@@ -749,6 +794,16 @@ impl Network {
             }
             NetworkEvent::HighlightedCard(cards) => {
                 debug!("[Network] Opponent highlighted cards: {:?}", cards);
+                if matches!(
+                    self.state,
+                    NetworkState::PlayTurn(_)
+                        | NetworkState::WaitForOpponent(_)
+                        | NetworkState::OpponentWaitingForYou
+                ) {
+                    self.defer(NetworkEvent::HighlightedCard(cards));
+                    return;
+                }
+
                 let current_hand = game_manipulation.get_current_hands_left();
                 if current_hand == 0 {
                     debug!("[Network] No more hands left, ignoring highlighted cards and tell opponent to play");
@@ -786,8 +841,10 @@ impl Network {
                 debug!("[Network] Opponent new cards alignement: {:?}", alignement);
                 match self.state {
                     NetworkState::SentHighlighted(_)
+                    | NetworkState::OpponentHighlighted(_)
                     | NetworkState::WaitForUserAction
-                    | NetworkState::PlayTurn(_) => {
+                    | NetworkState::PlayTurn(_)
+                    | NetworkState::WaitForOpponent(_) => {
                         game_manipulation.register_event(
                             GameManipulationEvent::NewHandCardsAlignement(
                                 alignement.clone(),
@@ -884,7 +941,12 @@ impl Network {
                         }
 
                         game_manipulation.register_event(game_event.clone());
-                        self.state = NetworkState::WaitForUserAction;
+                        self.set_wait_for_user_action(game_manipulation);
+                    }
+                    NetworkState::OpponentHighlighted(_)
+                    | NetworkState::SentHighlighted(_)
+                    | NetworkState::PlayTurn(_) => {
+                        self.defer(NetworkEvent::WaitForYourAction);
                     }
                     _ => {
                         warn!(
@@ -898,6 +960,8 @@ impl Network {
                 debug!("[Network] Opponent used consumeable card: {:?}", index);
                 match self.state {
                     NetworkState::SentHighlighted(_)
+                    | NetworkState::OpponentHighlighted(_)
+                    | NetworkState::PlayTurn(_)
                     | NetworkState::WaitForUserAction
                     | NetworkState::WaitForOpponent(_) => {
                         game_manipulation.register_event(
@@ -920,7 +984,11 @@ impl Network {
             NetworkEvent::VoucherUsed(card) => {
                 debug!("[Network] Opponent used voucher card: {:?}", card);
                 match self.state {
-                    NetworkState::WaitForOpponent(_) | NetworkState::WaitForUserAction => {
+                    NetworkState::SentHighlighted(_)
+                    | NetworkState::OpponentHighlighted(_)
+                    | NetworkState::PlayTurn(_)
+                    | NetworkState::WaitForOpponent(_)
+                    | NetworkState::WaitForUserAction => {
                         game_manipulation
                             .register_event(GameManipulationEvent::UsedVoucherCard(card));
                     }
@@ -933,6 +1001,8 @@ impl Network {
                 debug!("[Network] Opponent opened booster: {:?}", card);
                 match self.state {
                     NetworkState::SentHighlighted(_)
+                    | NetworkState::OpponentHighlighted(_)
+                    | NetworkState::PlayTurn(_)
                     | NetworkState::WaitForUserAction
                     | NetworkState::WaitForOpponent(_) => {
                         game_manipulation.register_event(GameManipulationEvent::OpenBooster(
@@ -948,7 +1018,11 @@ impl Network {
             NetworkEvent::HighlightedBoosterCard(cards, selected_card) => {
                 debug!("[Network] Opponent highlighted booster card: {:?}", cards);
                 match self.state {
-                    NetworkState::WaitForUserAction | NetworkState::WaitForOpponent(_) => {
+                    NetworkState::SentHighlighted(_)
+                    | NetworkState::OpponentHighlighted(_)
+                    | NetworkState::PlayTurn(_)
+                    | NetworkState::WaitForUserAction
+                    | NetworkState::WaitForOpponent(_) => {
                         game_manipulation.register_event(
                             GameManipulationEvent::HighlightedBoosterCard(cards, selected_card),
                         );
@@ -964,7 +1038,9 @@ impl Network {
             NetworkEvent::RerollShop => {
                 debug!("[Network] Opponent reroll shop");
                 match self.state {
-                    NetworkState::PlayTurn(_)
+                    NetworkState::SentHighlighted(_)
+                    | NetworkState::OpponentHighlighted(_)
+                    | NetworkState::PlayTurn(_)
                     | NetworkState::WaitForUserAction
                     | NetworkState::WaitForOpponent(_) => {
                         game_manipulation.register_event(GameManipulationEvent::RerollShop);
@@ -977,7 +1053,9 @@ impl Network {
             NetworkEvent::BoughtCard(card_index, id) => {
                 debug!("[Network] Opponent bought card: {:?}", card_index);
                 match self.state {
-                    NetworkState::PlayTurn(_)
+                    NetworkState::SentHighlighted(_)
+                    | NetworkState::OpponentHighlighted(_)
+                    | NetworkState::PlayTurn(_)
                     | NetworkState::WaitForUserAction
                     | NetworkState::WaitForOpponent(_) => {
                         game_manipulation
@@ -1007,7 +1085,9 @@ impl Network {
             NetworkEvent::Cashout(to_ease) => {
                 debug!("[Network] Opponent cash out: {:?}", to_ease);
                 match self.state {
-                    NetworkState::PlayTurn(_)
+                    NetworkState::SentHighlighted(_)
+                    | NetworkState::OpponentHighlighted(_)
+                    | NetworkState::PlayTurn(_)
                     | NetworkState::WaitForUserAction
                     | NetworkState::WaitForOpponent(_) => {
                         game_manipulation
@@ -1022,6 +1102,7 @@ impl Network {
                 info!("[Network] Opponent rematch request");
                 match self.state {
                     NetworkState::WaitingForRematchResponse => {
+                        self.deferred.clear();
                         self.state = NetworkState::WaitForUserAction;
                         game_manipulation.register_event(GameManipulationEvent::OnRematch);
                     }

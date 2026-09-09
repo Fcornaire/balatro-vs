@@ -10,6 +10,8 @@ use crate::macros::macros::{
 
 use super::{card_conf::AreaType, network::NetworkState, CardConf};
 
+const MAX_ALIGNEMENT_RETRIES: u32 = 1200; //ticks an alignment may wait for the opponent area to reach the expected size
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum GameManipulationEvent {
     OnRandomMatchmakingSelected,
@@ -51,6 +53,7 @@ pub struct GameManipulation {
     is_timer_ack_needed: bool,
     is_player_shopping: bool,
     last_network_state: NetworkState,
+    alignement_retries: u32,
 }
 
 impl GameManipulation {
@@ -64,6 +67,7 @@ impl GameManipulation {
             is_player_shopping: false,
             event_queue: VecDeque::new(),
             last_network_state: NetworkState::Idle,
+            alignement_retries: 0,
         }
     }
 
@@ -248,10 +252,21 @@ impl GameManipulation {
                         .max()
                         .unwrap_or(0);
                     if max_index > opponent_length {
-                        warn!(
-                            "[GameManipulation] Weird alignment ({} cards, need {}, have {}). Retrying next tick.",
-                            to_treat.len(), max_index, opponent_length
-                        );
+                        self.alignement_retries += 1;
+                        if self.alignement_retries > MAX_ALIGNEMENT_RETRIES {
+                            error!(
+                                "[GameManipulation] Dropping {} {} alignment(s): need {} cards but opponent still has {}",
+                                to_treat.len(), _type, max_index, opponent_length
+                            );
+                            self.alignement_retries = 0;
+                            return;
+                        }
+                        if self.alignement_retries == 1 {
+                            warn!(
+                                "[GameManipulation] Weird alignment ({} cards, need {}, have {}). Retrying next tick.",
+                                to_treat.len(), max_index, opponent_length
+                            );
+                        }
                         for alignement in to_treat.into_iter().rev() {
                             self.event_queue.push_front(
                                 GameManipulationEvent::NewHandCardsAlignement(
@@ -262,6 +277,7 @@ impl GameManipulation {
                         }
                         return;
                     }
+                    self.alignement_retries = 0;
 
                     let cards_update =
                         self.get_cards_alignements_update(&mut to_treat, _type.clone());
