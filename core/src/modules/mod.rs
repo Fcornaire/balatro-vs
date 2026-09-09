@@ -258,7 +258,8 @@ impl Modules {
     }
 
     pub fn network_wait_for_next_action(&mut self) -> Result<()> {
-        self.network.wait_for_next_action();
+        self.network
+            .wait_for_next_action(&mut self.game_manipulation);
         Ok(())
     }
 

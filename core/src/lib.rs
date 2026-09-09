@@ -161,6 +161,61 @@ pub fn reset_transport() {
 }
 
 #[cfg(all(target_os = "windows", feature = "mlua"))]
+const MAX_LOG_FILES: usize = 10;
+
+#[cfg(all(target_os = "windows", feature = "mlua"))]
+fn create_log_file() -> Option<std::fs::File> {
+    use std::{
+        fs::{create_dir_all, read_dir},
+        path::PathBuf,
+    };
+
+    use time::OffsetDateTime;
+
+    let dir = PathBuf::from(std::env::var("APPDATA").ok()?)
+        .join("Balatro")
+        .join("Mods")
+        .join("balatro-vs")
+        .join("logs");
+    create_dir_all(&dir).ok()?;
+
+    let mut logs: Vec<PathBuf> = read_dir(&dir)
+        .ok()?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map_or(false, |name| {
+                    name.starts_with("bvs-") && name.ends_with(".log")
+                })
+        })
+        .collect();
+    logs.sort();
+    let excess = logs.len().saturating_sub(MAX_LOG_FILES - 1);
+    for path in logs.iter().take(excess) {
+        let _ = std::fs::remove_file(path);
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let stamp = format!(
+        "{:04}.{:02}.{:02}-{:02}.{:02}.{:02}",
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second()
+    );
+
+    let mut path = dir.join(format!("bvs-{stamp}.log"));
+    if path.exists() {
+        path = dir.join(format!("bvs-{stamp}-{}.log", std::process::id()));
+    }
+
+    std::fs::File::create(path).ok()
+}
+
+#[cfg(all(target_os = "windows", feature = "mlua"))]
 fn init_tracing_with_file() {
     use tracing_subscriber::prelude::*;
 
@@ -170,16 +225,7 @@ fn init_tracing_with_file() {
         .with_target(true)
         .with_ansi(false); // lovely console doesn't support ANSI
 
-    let file = std::env::var("APPDATA").ok().and_then(|appdata| {
-        let path = std::path::PathBuf::from(appdata)
-            .join("Balatro")
-            .join("Mods")
-            .join("balatro-vs")
-            .join("bvs.log");
-        std::fs::File::create(path).ok()
-    });
-
-    let file_layer = file.map(|f| {
+    let file_layer = create_log_file().map(|f| {
         tracing_subscriber::fmt::layer()
             .compact()
             .with_thread_names(true)
