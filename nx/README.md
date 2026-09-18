@@ -16,7 +16,7 @@ Build machine :
 - rustup toolchain `skyline` and `cargo-skyline` (`cargo install cargo-skyline`).
 
 Console: a working lovely-injector-nx install and a copy of
-Steamodded `smods-1.0.0-beta-1620a`.
+Steamodded `26.829.0` .
 
 ## Build
 
@@ -34,7 +34,7 @@ atmosphere\contents\0100CD801CE5E000\romfs\skyline\plugins\
   liblovely_injector_nx.nro                the loader
   libbalatro_vs_nx.nro                     this plugin
 Balatro\Mods\
-  Steamodded\                              copy of smods-1.0.0-beta-1620a
+  Steamodded\                              copy of Steamodded 26.829.0
   balatro-vs\lovely\                       copy of ..\patchs (tomls, Lua modules, bvs.json)
 ```
 

@@ -6,10 +6,10 @@
   "description": "Balatro-vs is a network versus mod for Balatro",
   "prefix": "bvs",
   "main_file": "core.lua",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "badge_colour": "1A5EBF",
   "priority": -1,
-  "dependencies": ["Steamodded (>=1.0.0~)"],
+  "dependencies": ["Steamodded (==26.829.0)"],
   "server": {
     "protocol": "ws",
     "host": "localhost",
