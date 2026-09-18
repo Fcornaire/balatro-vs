@@ -32,7 +32,7 @@ More info at [How 2 play](./HOW2PLAY.MD) (this will probably move to the wiki at
 # Requirements
 
 - **[lovely-injector](https://github.com/ethangreen-dev/lovely-injector) v0.9.0** (latest to this day). Any previous version will mostly crash at startup.
-- **[Steamodded](https://github.com/Steamodded/smods) 1.0.0-beta-1620a**. The mod will not work without it. Further update might work but not guaranted as soon as they are available,will probably need some patchs adjustement. You will get a warning like this if not installed
+- **[Steamodded](https://github.com/Steamodded/smods) 26.829.0**. Without Steamodded, you will get a warning like this
 <p align="left">
   <img src="images/smods_needed.png" alt="need smods" width = "600"/>
 </p>

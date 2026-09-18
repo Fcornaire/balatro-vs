@@ -36,6 +36,13 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Using version: $VERSION"
 
+      - name: Set required Steamodded version
+        shell: bash
+        run: |
+          SMODS_VERSION=$(jq -r '.dependencies[0]' patchs/bvs.json | sed -E 's/.*\(==([^)]+)\).*/\1/')
+          echo "SMODS_VERSION=$SMODS_VERSION" >> $GITHUB_ENV
+          echo "Using Steamodded version: $SMODS_VERSION"
+
       - name: Check version
         uses: ./.github/actions/check-version
         with:
@@ -86,6 +93,7 @@ jobs:
 
           [package.dependencies]
           Thunderstore-lovely = "0.9.0"
+          Steamodded-Steamodded = "${{ env.SMODS_VERSION }}"
 
           [build]
           icon = "./images/icon.png"

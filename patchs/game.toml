@@ -139,12 +139,7 @@ times = 1
 [[patches]]
 [patches.pattern]
 target = "game.lua"
-pattern = '''G.E_MANAGER:add_event(Event({
-                    trigger = 'immediate',
-                    func = function()
-                    G.STATE = G.STATES.SELECTING_HAND
-                    G.STATE_COMPLETE = false
-                    G.GAME.blind:drawn_to_hand()
+pattern = '''G.GAME.blind:drawn_to_hand()
                     return true
                     end
                 }))'''
